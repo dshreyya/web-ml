@@ -1,0 +1,6 @@
+{
+  "name": "BlueCarbon Nexus",
+  "description": "Blockchain-Verified Blue Carbon Registry & MRV Infrastructure",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
