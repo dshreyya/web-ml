@@ -92,6 +92,9 @@ export function Navbar() {
 
         <div className="hidden items-center gap-3 lg:flex">
           <ThemeToggle />
+          <Button href="/role-selection" variant="primary" size="md">
+         Get Started
+        </Button>
 
           {user ? (
             <div className="flex items-center gap-2">
@@ -114,15 +117,7 @@ export function Navbar() {
               </button>
             </div>
           ) : (
-            <>
-              <Button href="/login" variant="ghost" size="md">
-                Sign In
-              </Button>
-
-              <Button href="/role-selection" variant="primary" size="md">
-                Get Started
-              </Button>
-            </>
+           null
           )}
         </div>
 
@@ -184,27 +179,7 @@ export function Navbar() {
                     </Button>
                   </div>
                 ) : (
-                  <>
-                    <Button
-                      href="/login"
-                      variant="secondary"
-                      size="md"
-                      className="w-full"
-                      onClick={() => setOpen(false)}
-                    >
-                      Sign In
-                    </Button>
-
-                    <Button
-                      href="/role-selection"
-                      variant="primary"
-                      size="md"
-                      className="w-full"
-                      onClick={() => setOpen(false)}
-                    >
-                      Get Started
-                    </Button>
-                  </>
+                  null
                 )}
               </div>
             </div>

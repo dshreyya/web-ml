@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import Image from "next/image";
-import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function CtaBand() {
@@ -40,20 +39,12 @@ export function CtaBand() {
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
               <Button
-                href="/role-selection"
-                variant="primary"
-                size="lg"
-              >
-                Get Started <ArrowRight size={15} />
-              </Button>
-
-              <Button
                 href="#contact"
                 size="lg"
                 variant="ghost"
                 className="border border-sand-50/30 text-sand-50 hover:bg-sand-50/10"
               >
-                Talk to our team
+                Talk to our Team
               </Button>
             </div>
           </div>
