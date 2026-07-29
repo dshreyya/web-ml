@@ -35,15 +35,15 @@ export function Navbar() {
     const supabase = getSupabaseClient();
     if (!supabase) return;
 
-    // Fetch initial user
     supabase.auth.getUser().then(({ data: { user } }) => {
       setUser(user);
     });
 
-    // Listen for auth state changes
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+      }
+    );
 
     return () => {
       authListener.subscription.unsubscribe();
@@ -72,6 +72,7 @@ export function Navbar() {
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-ocean-900 text-mangrove-300 dark:bg-mangrove-500 dark:text-ink">
             <Leaf size={15} strokeWidth={2.25} />
           </span>
+
           <span className="font-display text-[17px] font-medium tracking-tight text-ink dark:text-sand-50">
             BlueCarbon Nexus
           </span>
@@ -91,12 +92,17 @@ export function Navbar() {
 
         <div className="hidden items-center gap-3 lg:flex">
           <ThemeToggle />
+
           {user ? (
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2 rounded-full border border-ocean-900/10 bg-sand-100/60 px-3.5 py-1.5 text-xs font-medium text-ink dark:border-sand-100/15 dark:bg-[#0a232b] dark:text-sand-100">
-                <User size={14} className="text-mangrove-600 dark:text-mangrove-400" />
+                <User
+                  size={14}
+                  className="text-mangrove-600 dark:text-mangrove-400"
+                />
                 <span className="max-w-[150px] truncate">{user.email}</span>
               </div>
+
               <button
                 type="button"
                 onClick={handleSignOut}
@@ -112,8 +118,9 @@ export function Navbar() {
               <Button href="/login" variant="ghost" size="md">
                 Sign In
               </Button>
-              <Button href="#register" variant="primary" size="md">
-                Register Project
+
+              <Button href="/role-selection" variant="primary" size="md">
+                Get Started
               </Button>
             </>
           )}
@@ -121,6 +128,7 @@ export function Navbar() {
 
         <div className="flex items-center gap-2 lg:hidden">
           <ThemeToggle />
+
           <button
             onClick={() => setOpen((v) => !v)}
             aria-label="Toggle menu"
@@ -151,13 +159,18 @@ export function Navbar() {
                   {link.label}
                 </a>
               ))}
+
               <div className="mt-2 flex flex-col gap-2 px-3">
                 {user ? (
                   <div className="flex flex-col gap-2 pt-2 border-t border-ocean-900/10 dark:border-sand-100/10">
                     <div className="flex items-center gap-2 text-xs font-medium text-ink dark:text-sand-100">
-                      <User size={14} className="text-mangrove-600 dark:text-mangrove-400" />
+                      <User
+                        size={14}
+                        className="text-mangrove-600 dark:text-mangrove-400"
+                      />
                       <span className="truncate">{user.email}</span>
                     </div>
+
                     <Button
                       variant="secondary"
                       size="md"
@@ -172,11 +185,24 @@ export function Navbar() {
                   </div>
                 ) : (
                   <>
-                    <Button href="/login" variant="secondary" size="md" className="w-full" onClick={() => setOpen(false)}>
+                    <Button
+                      href="/login"
+                      variant="secondary"
+                      size="md"
+                      className="w-full"
+                      onClick={() => setOpen(false)}
+                    >
                       Sign In
                     </Button>
-                    <Button href="#register" variant="primary" size="md" className="w-full" onClick={() => setOpen(false)}>
-                      Register Project
+
+                    <Button
+                      href="/role-selection"
+                      variant="primary"
+                      size="md"
+                      className="w-full"
+                      onClick={() => setOpen(false)}
+                    >
+                      Get Started
                     </Button>
                   </>
                 )}
@@ -188,4 +214,3 @@ export function Navbar() {
     </header>
   );
 }
-

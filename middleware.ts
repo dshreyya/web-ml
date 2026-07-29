@@ -1,5 +1,5 @@
-import { createServerClient } from '@supabase/ssr';
-import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -9,63 +9,75 @@ export async function middleware(request: NextRequest) {
   let supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   let supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || (!supabaseUrl.startsWith('http://') && !supabaseUrl.startsWith('https://'))) {
-    supabaseUrl = 'https://ihjtbwlrdkezosolwqaz.supabase.co';
+  // Fallback to your project URL if env variable is invalid
+  if (
+    !supabaseUrl ||
+    (!supabaseUrl.startsWith("http://") &&
+      !supabaseUrl.startsWith("https://"))
+  ) {
+    supabaseUrl = "https://ihjtbwlrdkezosolwqaz.supabase.co";
   }
 
-  if (!supabaseAnonKey || supabaseAnonKey.startsWith('sb_secret_')) {
-    supabaseAnonKey = 'sb_publishable_vfL2-Hze8IHOc9HzvnTXtQ_zYiDSgoG';
+  // Fallback to your publishable (anon) key if env variable is invalid
+  if (!supabaseAnonKey || supabaseAnonKey.startsWith("sb_secret_")) {
+    supabaseAnonKey =
+      "sb_publishable_vfL2-Hze8IHOc9HzvnTXtQ_zYiDSgoG";
   }
 
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          supabaseResponse = NextResponse.next({
-            request,
-          });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
+  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
       },
-    }
-  );
 
-  // Refresh session if expired - required for Server Components
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value }) =>
+          request.cookies.set(name, value)
+        );
+
+        supabaseResponse = NextResponse.next({
+          request,
+        });
+
+        cookiesToSet.forEach(({ name, value, options }) =>
+          supabaseResponse.cookies.set(name, value, options)
+        );
+      },
+    },
+  });
+
+  // Refresh session
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
-  // Rule 1: Auth routes for logged in users -> redirect to home '/'
-  if (user && (pathname === '/login' || pathname === '/signup')) {
+  // Logged-in users shouldn't visit login/signup
+  if (
+    user &&
+    (pathname === "/login" || pathname === "/signup")
+  ) {
     const url = request.nextUrl.clone();
-    url.pathname = '/';
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
-  // Rule 2: Unauthenticated users attempting to access protected routes
-  // (All routes except public ones: /, /login, /signup, /forgot-password, /reset-password, /verify-email, /api/*)
+  // Public routes (No authentication required)
   const isPublicRoute =
-    pathname === '/' ||
-    pathname.startsWith('/login') ||
-    pathname.startsWith('/signup') ||
-    pathname.startsWith('/forgot-password') ||
-    pathname.startsWith('/reset-password') ||
-    pathname.startsWith('/verify-email') ||
-    pathname.startsWith('/api');
+    pathname === "/" ||
+    pathname.startsWith("/role-selection") ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup") ||
+    pathname.startsWith("/forgot-password") ||
+    pathname.startsWith("/reset-password") ||
+    pathname.startsWith("/verify-email") ||
+    pathname.startsWith("/api");
 
+  // Redirect unauthenticated users trying to access protected pages
   if (!user && !isPublicRoute) {
     const url = request.nextUrl.clone();
-    url.pathname = '/login';
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
@@ -74,6 +86,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

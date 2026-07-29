@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 
 export function CtaBand() {
   return (
-    <section id="register" className="section-pad pb-24 sm:pb-32">
+    <section id="get-started" className="section-pad pb-24 sm:pb-32">
       <motion.div
         initial={{ opacity: 1, y: 0 }}
         animate={{ opacity: 1, y: 0 }}
@@ -25,18 +25,28 @@ export function CtaBand() {
             />
             <div className="absolute inset-0 bg-ocean-950/80" />
           </div>
+
           <div className="relative mx-auto max-w-xl text-center">
             <h2 className="font-display text-[2rem] leading-tight text-sand-50 balance sm:text-[2.5rem]">
-              Bring your restoration project onto a verifiable record.
+              Join the Blue Carbon Ecosystem
             </h2>
+
             <p className="mt-4 text-[15px] leading-relaxed text-sand-100/70">
-              Registration takes under an hour. Our field team helps you map your first
-              monitoring boundary within a week.
+              Whether you're a farmer restoring mangroves, an industry buyer
+              investing in verified carbon credits, or an administrator managing
+              the platform, BlueCarbon Nexus provides a secure and transparent
+              ecosystem for everyone.
             </p>
+
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
-              <Button href="#register" variant="primary" size="lg">
-                Register Project <ArrowRight size={15} />
+              <Button
+                href="/role-selection"
+                variant="primary"
+                size="lg"
+              >
+                Get Started <ArrowRight size={15} />
               </Button>
+
               <Button
                 href="#contact"
                 size="lg"
