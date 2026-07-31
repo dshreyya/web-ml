@@ -1,151 +1,580 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { User, Leaf, MapPin } from "lucide-react";
+import {
+  User,
+  Mail,
+  Phone,
+  MapPin,
+  Building,
+  Ruler,
+  FileBadge,
+  Compass,
+  Upload,
+  ArrowLeft,
+  ArrowRight,
+  Leaf,
+  Globe2,
+  Map,
+  ShieldAlert,
+} from "lucide-react";
+
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
+import { ProgressBar } from "@/components/farmer/ProgressBar";
 
-const fadeUp = {
-  hidden: {
-    opacity: 0,
-    y: 24,
+// Framer Motion Animation Variants
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.1,
+    },
   },
-  show: (i: number) => ({
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 25 },
+  visible: {
     opacity: 1,
     y: 0,
-    transition: {
-      duration: 0.7,
-      delay: i * 0.12,
-    },
-  }),
+    transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
+  },
 };
 
 export default function FarmerProfilePage() {
+  const router = useRouter();
+
+  // State management for geolocation demo
+  const [lat, setLat] = useState<string>("");
+  const [lng, setLng] = useState<string>("");
+  const [isLocating, setIsLocating] = useState<boolean>(false);
+
+  // State management for image upload preview demo
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const handleGetCurrentLocation = () => {
+    setIsLocating(true);
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setLat(position.coords.latitude.toFixed(6));
+          setLng(position.coords.longitude.toFixed(6));
+          setIsLocating(false);
+        },
+        () => {
+          // Fallback demo coordinates
+          setLat("12.971598");
+          setLng("77.594566");
+          setIsLocating(false);
+        }
+      );
+    } else {
+      setLat("12.971598");
+      setLng("77.594566");
+      setIsLocating(false);
+    }
+  };
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setPhotoPreview(url);
+    }
+  };
+
   return (
-    <>
+    <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
+      {/* Background Ambient Glow */}
+      <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl opacity-70 dark:from-ocean-900/30 dark:via-mangrove-900/20" />
+
+      {/* Global Navbar */}
       <Navbar />
 
-      <main className="relative min-h-screen overflow-hidden bg-gradient-to-b from-sand-50 via-white to-mangrove-50 dark:from-[#041116] dark:via-[#061418] dark:to-[#0a2024]">
-
-        {/* Background Blur */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -left-40 top-20 h-96 w-96 rounded-full bg-mangrove-400/20 blur-3xl" />
-          <div className="absolute right-0 top-40 h-[500px] w-[500px] rounded-full bg-ocean-500/10 blur-3xl" />
-        </div>
-
-        <section className="container-page relative pt-36 pb-24">
-
-          {/* Heading */}
-
-          <motion.div
-            custom={0}
-            initial="hidden"
-            animate="show"
-            variants={fadeUp}
-            className="mx-auto max-w-3xl text-center"
-          >
-            <span className="inline-flex items-center rounded-full border border-mangrove-300/40 bg-mangrove-100/60 px-4 py-1 text-sm font-medium text-mangrove-700 dark:bg-mangrove-900/30 dark:text-mangrove-300">
-              Farmer Onboarding
+      {/* Main Content Area */}
+      <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-5xl">
+        {/* Hero Section */}
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          className="text-center space-y-4 mb-8"
+        >
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-sm backdrop-blur-md">
+            <Leaf size={14} className="text-mangrove-600 dark:text-mangrove-400" />
+            <span className="font-mono text-xs uppercase tracking-widest text-ink-soft dark:text-sand-100/80">
+              BlueCarbon Nexus Registry
             </span>
+          </div>
 
-            <h1 className="mt-6 font-display text-5xl font-semibold tracking-tight text-ocean-950 dark:text-white">
-              Complete Farmer Profile
-            </h1>
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-display font-medium text-ink dark:text-sand-50 tracking-tight">
+            Complete Farmer Profile
+          </h1>
 
-            <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-600 dark:text-slate-300">
-              Complete your profile before registering your Blue Carbon
-              restoration project.
-            </p>
-          </motion.div>
+          <p className="text-sm sm:text-base text-ink-soft dark:text-sand-100/70 max-w-xl mx-auto leading-relaxed">
+            Complete your profile before registering your Blue Carbon restoration project and uploading satellite MRV documents.
+          </p>
+        </motion.div>
 
-          {/* Personal Information Card */}
+        {/* Progress Bar Container */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, delay: 0.15 }}
+          className="mb-10"
+        >
+          <ProgressBar
+            currentStep={2}
+            steps={[
+              { id: 1, label: "Account" },
+              { id: 2, label: "Profile" },
+              { id: 3, label: "Documents" },
+              { id: 4, label: "Verification" },
+              { id: 5, label: "Dashboard" },
+            ]}
+          />
+        </motion.div>
 
+        {/* Form Container with Framer Motion Stagger */}
+        <motion.form
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          onSubmit={(e) => {
+            e.preventDefault();
+            router.push("/farmer/onboarding/documents");
+          }}
+          className="space-y-8"
+        >
+          {/* Card 1 — Personal Information */}
           <motion.div
-            custom={1}
-            initial="hidden"
-            animate="show"
-            variants={fadeUp}
-            className="mx-auto mt-16 max-w-5xl rounded-3xl border border-white/50 bg-white/70 p-10 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5"
+            variants={cardVariants}
+            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-10 shadow-soft"
           >
-            <div className="mb-8 flex items-center gap-3">
-              <div className="rounded-xl bg-mangrove-100 p-3 dark:bg-mangrove-900/30">
-                <User className="h-6 w-6 text-mangrove-700 dark:text-mangrove-300" />
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300">
+                <User size={22} />
               </div>
-
               <div>
-                <h2 className="text-2xl font-semibold text-ocean-950 dark:text-white">
+                <h2 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-sand-50">
                   Personal Information
                 </h2>
-
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Tell us about yourself.
+                <p className="text-xs sm:text-sm text-ink-soft dark:text-sand-100/70">
+                  Your primary contact details for regional verification and communication.
                 </p>
               </div>
             </div>
 
-            {/* FORM COMES IN PART B */}
-          </motion.div>
-
-          {/* Project Information Card */}
-
-          <motion.div
-            custom={2}
-            initial="hidden"
-            animate="show"
-            variants={fadeUp}
-            className="mx-auto mt-10 max-w-5xl rounded-3xl border border-white/50 bg-white/70 p-10 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5"
-          >
-            <div className="mb-8 flex items-center gap-3">
-              <div className="rounded-xl bg-ocean-100 p-3 dark:bg-ocean-900/30">
-                <Leaf className="h-6 w-6 text-ocean-700 dark:text-ocean-300" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
+              {/* Full Name */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Full Name <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <User size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Rajesh Kumar"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                  />
+                </div>
               </div>
 
+              {/* Email (Readonly) */}
               <div>
-                <h2 className="text-2xl font-semibold text-ocean-950 dark:text-white">
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Email Address <span className="text-xs font-sans text-ink-faint">(Readonly)</span>
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <Mail size={18} />
+                  </div>
+                  <input
+                    type="email"
+                    readOnly
+                    value="farmer@bluecarbonnexus.org"
+                    className="w-full rounded-xl border border-ocean-900/10 bg-sand-200/50 dark:bg-[#071a20]/30 pl-10 pr-4 py-3 text-sm text-ink-soft dark:text-sand-100/60 cursor-not-allowed dark:border-sand-100/10"
+                  />
+                </div>
+              </div>
+
+              {/* Phone Number */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Phone Number <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <Phone size={18} />
+                  </div>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="+91 98765 43210"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                  />
+                </div>
+              </div>
+
+              {/* Village */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Village <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <MapPin size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Sunderpur"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                  />
+                </div>
+              </div>
+
+              {/* District */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  District <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <Building size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. South 24 Parganas"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                  />
+                </div>
+              </div>
+
+              {/* State */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  State <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <Globe2 size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. West Bengal"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                  />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Card 2 — Project Information */}
+          <motion.div
+            variants={cardVariants}
+            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-10 shadow-soft"
+          >
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-mangrove-500/20 text-mangrove-800 dark:bg-mangrove-500/20 dark:text-mangrove-300">
+                <Leaf size={22} />
+              </div>
+              <div>
+                <h2 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-sand-50">
                   Project Information
                 </h2>
-
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Details about your Blue Carbon project.
+                <p className="text-xs sm:text-sm text-ink-soft dark:text-sand-100/70">
+                  Specify land dimensions and restoration site details.
                 </p>
               </div>
             </div>
 
-            {/* FORM COMES IN PART B */}
-          </motion.div>
-
-          {/* Location Card */}
-
-          <motion.div
-            custom={3}
-            initial="hidden"
-            animate="show"
-            variants={fadeUp}
-            className="mx-auto mt-10 max-w-5xl rounded-3xl border border-white/50 bg-white/70 p-10 shadow-2xl backdrop-blur-xl dark:border-white/10 dark:bg-white/5"
-          >
-            <div className="mb-8 flex items-center gap-3">
-              <div className="rounded-xl bg-emerald-100 p-3 dark:bg-emerald-900/30">
-                <MapPin className="h-6 w-6 text-emerald-700 dark:text-emerald-300" />
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-6">
+              {/* Organization / Farm Name */}
+              <div className="sm:col-span-3">
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Organization / Farm Name
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <Building size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="e.g. Sunderbans Delta Restoration Society"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                  />
+                </div>
               </div>
 
+              {/* Land Area */}
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Land Area
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <Ruler size={18} />
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="e.g. 25.5"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                  />
+                </div>
+              </div>
+
+              {/* Unit Dropdown */}
               <div>
-                <h2 className="text-2xl font-semibold text-ocean-950 dark:text-white">
-                  Location
-                </h2>
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Unit
+                </label>
+                <select className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 px-4 py-3 text-sm text-ink dark:text-sand-50 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15">
+                  <option value="acres">Acres</option>
+                  <option value="hectares">Hectares</option>
+                </select>
+              </div>
 
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Help us locate your restoration project.
+              {/* Mangrove Project Location Textarea */}
+              <div className="sm:col-span-3">
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Mangrove Project Location & Description
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Describe coastal topology, tidal range, and primary mangrove species (e.g. Rhizophora mucronata, Avicennia marina)..."
+                  className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 p-4 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                />
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Card 3 — Identity Information */}
+          <motion.div
+            variants={cardVariants}
+            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-10 shadow-soft"
+          >
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300">
+                <FileBadge size={22} />
+              </div>
+              <div>
+                <h2 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-sand-50">
+                  Identity Information
+                </h2>
+                <p className="text-xs sm:text-sm text-ink-soft dark:text-sand-100/70">
+                  Select your government identification type for verification.
                 </p>
               </div>
             </div>
 
-            {/* FORM COMES IN PART B */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
+              {/* Government ID Type */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Government ID Type
+                </label>
+                <select className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 px-4 py-3 text-sm text-ink dark:text-sand-50 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15">
+                  <option value="aadhaar">Aadhaar</option>
+                  <option value="passport">Passport</option>
+                  <option value="voter_id">Voter ID</option>
+                  <option value="driving_license">Driving License</option>
+                </select>
+              </div>
+
+              {/* Government ID Number */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Government ID Number
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <FileBadge size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Enter ID number"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                  />
+                </div>
+              </div>
+            </div>
           </motion.div>
 
-        </section>
+          {/* Card 4 — Project Location Coordinates */}
+          <motion.div
+            variants={cardVariants}
+            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-10 shadow-soft"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-mangrove-500/20 text-mangrove-800 dark:bg-mangrove-500/20 dark:text-mangrove-300">
+                  <Compass size={22} />
+                </div>
+                <div>
+                  <h2 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-sand-50">
+                    Project Location
+                  </h2>
+                  <p className="text-xs sm:text-sm text-ink-soft dark:text-sand-100/70">
+                    Provide exact GPS coordinates for satellite boundary tracking.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleGetCurrentLocation}
+                disabled={isLocating}
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-ocean-900/15 bg-white px-5 py-2.5 text-xs font-mono font-medium text-ink shadow-sm hover:bg-sand-50 transition-all dark:border-sand-100/15 dark:bg-[#071a20] dark:text-sand-100 dark:hover:bg-[#082028] disabled:opacity-50 shrink-0"
+              >
+                <Map size={15} className="text-mangrove-600 dark:text-mangrove-400" />
+                <span>{isLocating ? "Fetching Coordinates..." : "Use Current Location"}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
+              {/* Latitude */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Latitude
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <Compass size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    value={lat}
+                    onChange={(e) => setLat(e.target.value)}
+                    placeholder="e.g. 21.9497"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Longitude */}
+              <div>
+                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
+                  Longitude
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
+                    <Compass size={18} />
+                  </div>
+                  <input
+                    type="text"
+                    value={lng}
+                    onChange={(e) => setLng(e.target.value)}
+                    placeholder="e.g. 88.9007"
+                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15 font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Card 5 — Profile Photo */}
+          <motion.div
+            variants={cardVariants}
+            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-10 shadow-soft"
+          >
+            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300">
+                <Upload size={22} />
+              </div>
+              <div>
+                <h2 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-sand-50">
+                  Profile Photo
+                </h2>
+                <p className="text-xs sm:text-sm text-ink-soft dark:text-sand-100/70">
+                  Upload a clear image for project developer verification.
+                </p>
+              </div>
+            </div>
+
+            {/* Drag & Drop Upload Container */}
+            <div className="relative group border-2 border-dashed border-ocean-900/15 dark:border-sand-100/15 rounded-2xl bg-sand-50/50 dark:bg-[#071a20]/40 p-8 text-center transition-all hover:border-mangrove-500 hover:bg-sand-50 dark:hover:bg-[#071a20]/80">
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+              />
+
+              {photoPreview ? (
+                <div className="flex flex-col items-center justify-center space-y-3">
+                  <img
+                    src={photoPreview}
+                    alt="Profile Preview"
+                    className="h-24 w-24 rounded-full object-cover border-2 border-mangrove-500 shadow-md"
+                  />
+                  <span className="text-xs font-mono text-mangrove-700 dark:text-mangrove-300 font-medium">
+                    Photo Selected — Click or Drag to replace
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center space-y-3">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white dark:bg-[#0a232b] text-ink-soft dark:text-sand-100/60 shadow-sm border border-ocean-900/10 dark:border-sand-100/10 group-hover:scale-105 transition-transform">
+                    <Upload size={24} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-ink dark:text-sand-50">
+                      Upload Profile Photo
+                    </p>
+                    <p className="text-xs text-ink-soft dark:text-sand-100/60 mt-1">
+                      Drag & Drop image here, or{" "}
+                      <span className="text-mangrove-700 dark:text-mangrove-300 underline font-medium">
+                        Browse Image
+                      </span>
+                    </p>
+                  </div>
+                  <p className="text-[11px] font-mono text-ink-faint dark:text-sand-100/40">
+                    Supports JPG, PNG, WEBP (Max 5MB)
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          {/* Navigation Buttons Row */}
+          <motion.div
+            variants={cardVariants}
+            className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4"
+          >
+            <Link
+              href="/farmer/onboarding"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full border border-ocean-900/15 bg-white px-6 py-3.5 text-sm font-medium text-ink shadow-sm hover:bg-sand-50 transition-all dark:border-sand-100/15 dark:bg-[#0a232b] dark:text-sand-100 dark:hover:bg-[#071a20]"
+            >
+              <ArrowLeft size={16} />
+              <span>Back</span>
+            </Link>
+
+            <button
+              type="submit"
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-8 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
+            >
+              <span>Save & Continue</span>
+              <ArrowRight size={16} />
+            </button>
+          </motion.div>
+        </motion.form>
       </main>
 
+      {/* Global Footer */}
       <Footer />
-    </>
+    </div>
   );
 }
