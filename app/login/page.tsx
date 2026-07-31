@@ -30,6 +30,21 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+
+  const handleRoleRedirect = () => {
+    const selectedRole = localStorage.getItem("selectedRole");
+
+    if (selectedRole === "farmer") {
+      router.push("/farmer/onboarding");
+    } else if (selectedRole === "buyer") {
+      router.push("/industry/onboarding");
+    } else if (selectedRole === "admin") {
+      router.push("/admin/dashboard");
+    } else {
+      router.push("/");
+    }
+  };
+
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -41,7 +56,7 @@ export default function LoginPage() {
 
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
-        router.push("/");
+        handleRoleRedirect();
       }
     });
   }, [router]);
@@ -114,7 +129,7 @@ export default function LoginPage() {
             localStorage.setItem("bcn_remember_email", data.email);
           }
           setTimeout(() => {
-            router.push("/");
+            handleRoleRedirect();
           }, 1000);
         }
       } else {
@@ -127,7 +142,7 @@ export default function LoginPage() {
           `Authenticated as ${data.email}. Redirecting to verified portal...`
         );
         setTimeout(() => {
-          router.push("/");
+          handleRoleRedirect();
         }, 1000);
       }
     } catch (err) {
