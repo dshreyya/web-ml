@@ -94,7 +94,6 @@ export default function SignupPage() {
     });
   }, [router]);
 
-
   const addToast = (type: "success" | "error" | "info", title: string, description?: string) => {
     const id = Math.random().toString(36).substring(2, 9);
     setToasts((prev) => [...prev, { id, type, title, description }]);
@@ -137,6 +136,8 @@ export default function SignupPage() {
       console.log("[Signup] Supabase Client Initialized:", !!supabase);
 
       if (supabase) {
+        const storedRole = localStorage.getItem("selectedRole") || "farmer";
+
         // Real Supabase Auth Signup
         console.log("[Signup] Calling supabase.auth.signUp for email:", data.email);
         const { error, data: authData } = await supabase.auth.signUp({
@@ -145,6 +146,7 @@ export default function SignupPage() {
           options: {
             data: {
               full_name: data.fullName,
+              role: storedRole,
             },
             emailRedirectTo: `${window.location.origin}/verify-email`,
           },

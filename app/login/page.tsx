@@ -31,8 +31,9 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
 
-  const handleRoleRedirect = () => {
-    const selectedRole = localStorage.getItem("selectedRole");
+  const handleRoleRedirect = (userRole?: string) => {
+    const selectedRole =
+      userRole || localStorage.getItem("selectedRole");
 
     if (selectedRole === "farmer") {
       router.push("/farmer/onboarding");
@@ -56,7 +57,7 @@ export default function LoginPage() {
 
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
-        handleRoleRedirect();
+        handleRoleRedirect(user.user_metadata?.role);
       }
     });
   }, [router]);
@@ -99,7 +100,7 @@ export default function LoginPage() {
       if (supabase) {
         console.log("Calling Supabase login...");
         // Real Supabase Authentication call
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error, data: authData } = await supabase.auth.signInWithPassword({
           email: data.email,
           password: data.password,
         });
@@ -129,7 +130,7 @@ export default function LoginPage() {
             localStorage.setItem("bcn_remember_email", data.email);
           }
           setTimeout(() => {
-            handleRoleRedirect();
+            handleRoleRedirect(authData.user?.user_metadata?.role);
           }, 1000);
         }
       } else {

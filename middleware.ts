@@ -59,7 +59,19 @@ export async function middleware(request: NextRequest) {
     (pathname === "/login" || pathname === "/signup")
   ) {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+
+    const role = user.user_metadata?.role;
+
+    if (role === "farmer") {
+      url.pathname = "/farmer/onboarding";
+    } else if (role === "buyer") {
+      url.pathname = "/industry/onboarding";
+    } else if (role === "admin") {
+      url.pathname = "/admin/dashboard";
+    } else {
+      url.pathname = "/";
+    }
+
     return NextResponse.redirect(url);
   }
 
