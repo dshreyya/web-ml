@@ -15,10 +15,9 @@ import {
   Loader2,
   Lock,
   Mail,
-  User,
+  User as UserIcon,
   CheckCircle2,
   UserPlus,
-  ShieldAlert,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -28,7 +27,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 // Password strength calculator
 function calculatePasswordStrength(password: string) {
   let score = 0;
-  if (!password) return { score: 0, label: "", color: "bg-gray-200 dark:bg-gray-700" };
+  if (!password) return { score: 0, label: "", color: "bg-gray-200 dark:bg-gray-700", text: "" };
 
   if (password.length >= 8) score += 1;
   if (password.length >= 12) score += 1;
@@ -132,14 +131,19 @@ export default function SignupPage() {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const supabase = getSupabaseClient();
 
-      console.log("[Signup] Runtime NEXT_PUBLIC_SUPABASE_URL:", supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : "UNDEFINED");
+      console.log(
+        "[Signup] Runtime NEXT_PUBLIC_SUPABASE_URL:",
+        supabaseUrl ? `${supabaseUrl.substring(0, 20)}...` : "UNDEFINED"
+      );
       console.log("[Signup] Supabase Client Initialized:", !!supabase);
 
       if (supabase) {
-        const storedRole = localStorage.getItem("selectedRole") || "farmer";
+        const storedRole = typeof window !== "undefined" ? localStorage.getItem("selectedRole") || "farmer" : "farmer";
+        const origin = typeof window !== "undefined" ? window.location.origin : "";
 
         // Real Supabase Auth Signup
         console.log("[Signup] Calling supabase.auth.signUp for email:", data.email);
+
         const { error, data: authData } = await supabase.auth.signUp({
           email: data.email,
           password: data.password,
@@ -148,7 +152,7 @@ export default function SignupPage() {
               full_name: data.fullName,
               role: storedRole,
             },
-            emailRedirectTo: `${window.location.origin}/verify-email`,
+            emailRedirectTo: `${origin}/verify-email`,
           },
         });
 
@@ -156,7 +160,10 @@ export default function SignupPage() {
         console.log("[Signup Response] error:", error);
 
         if (error) {
-          if (error.message.toLowerCase().includes("email signups are disabled") || error.code === "email_provider_disabled") {
+          if (
+            error.message.toLowerCase().includes("email signups are disabled") ||
+            error.code === "email_provider_disabled"
+          ) {
             addToast(
               "error",
               "Email Provider Disabled in Supabase",
@@ -172,20 +179,22 @@ export default function SignupPage() {
             "Verification email sent. Please check your inbox to activate your account."
           );
           setIsSuccess(true);
-          // Redirect to email verification notice after short delay
+
           setTimeout(() => {
             router.push(`/verify-email?email=${encodeURIComponent(data.email)}`);
           }, 1500);
         }
       } else {
-        console.warn("[Signup] Supabase client is NOT initialized. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.");
+        console.warn(
+          "[Signup] Supabase client is NOT initialized. Check NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables."
+        );
         addToast(
           "error",
           "Supabase Not Configured",
           "Unable to connect to Supabase authentication server. Please verify environment variables."
         );
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[Signup] Unexpected exception during signup:", err);
       addToast(
         "error",
@@ -201,11 +210,13 @@ export default function SignupPage() {
     setIsLoading(true);
     try {
       const supabase = getSupabaseClient();
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+
       if (supabase) {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
-            redirectTo: `${window.location.origin}/signup`,
+            redirectTo: `${origin}/signup`,
           },
         });
         if (error) {
@@ -358,7 +369,7 @@ export default function SignupPage() {
                     </label>
                     <div className="relative">
                       <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
-                        <User size={17} />
+                        <UserIcon size={17} />
                       </div>
                       <input
                         type="text"

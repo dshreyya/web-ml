@@ -32,8 +32,7 @@ export default function LoginPage() {
   const router = useRouter();
 
   const handleRoleRedirect = (userRole?: string) => {
-    const selectedRole =
-      userRole || localStorage.getItem("selectedRole");
+    const selectedRole = userRole || localStorage.getItem("selectedRole");
 
     if (selectedRole === "farmer") {
       router.push("/farmer/onboarding");
@@ -100,7 +99,7 @@ export default function LoginPage() {
       if (supabase) {
         console.log("Calling Supabase login...");
         // Real Supabase Authentication call
-        const { error, data: authData } = await supabase.auth.signInWithPassword({
+        const { data: authData, error } = await supabase.auth.signInWithPassword({
           email: data.email,
           password: data.password,
         });
@@ -157,7 +156,6 @@ export default function LoginPage() {
     }
   };
 
-
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
@@ -185,15 +183,6 @@ export default function LoginPage() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleForgotPassword = (e: React.MouseEvent) => {
-    e.preventDefault();
-    addToast(
-      "info",
-      "Password Reset",
-      "Password reset functionality will be enabled in the upcoming account recovery release."
-    );
   };
 
   return (
@@ -375,7 +364,6 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isLoading}
-                onClick={() => console.log("Login button clicked")}
                 className="w-full flex items-center justify-center gap-2 rounded-full bg-ocean-900 px-6 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all hover:bg-ocean-700 focus:outline-none focus:ring-2 focus:ring-mangrove-500 focus:ring-offset-2 disabled:opacity-50 dark:bg-mangrove-500 dark:text-ink dark:hover:bg-mangrove-300"
               >
                 {isLoading ? (
