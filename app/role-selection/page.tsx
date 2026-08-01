@@ -1,96 +1,138 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { 
-  Sprout, 
-  Factory, 
-  ShieldCheck, 
-  ArrowRight, 
-  Leaf, 
-  ArrowLeft 
+import {
+  Leaf,
+  Building2,
+  ShieldCheck,
+  ArrowLeft,
+  ArrowRight,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { ToastContainer, ToastMessage } from "@/components/ui/toast";
+import { getSupabaseClient } from "@/lib/supabase";
 
-const ROLES = [
+type RoleType = "farmer" | "buyer" | "admin";
+
+const roles = [
   {
-    id: "farmer",
+    id: "farmer" as RoleType,
     title: "Farmer / Developer",
-    subtitle: "Project Developer Portal",
+    category: "Project Developer Portal",
+    badge: "Eco Registry",
     description:
       "Register coastal mangrove restoration projects, submit telemetry MRV data, and issue verified carbon credits.",
-    icon: Sprout,
-    badge: "Eco Registry",
-    color: "from-mangrove-500/20 to-mangrove-600/10",
-    borderHover: "hover:border-mangrove-500/50 dark:hover:border-mangrove-400/50",
-    iconBg: "bg-mangrove-500/10 text-mangrove-700 dark:bg-mangrove-500/20 dark:text-mangrove-300",
+    icon: Leaf,
+    actionText: "Continue as Farmer",
+    color: "from-mangrove-500/20 via-mangrove-500/10 to-transparent",
+    borderHover: "hover:border-mangrove-500",
+    iconBg: "bg-mangrove-500/15 text-mangrove-700 dark:bg-mangrove-500/20 dark:text-mangrove-300",
   },
   {
-    id: "buyer",
+    id: "buyer" as RoleType,
     title: "Industry Buyer",
-    subtitle: "Corporate Offset Portal",
+    category: "Corporate Offset Portal",
+    badge: "Enterprise Marketplace",
     description:
       "Browse immutable blue carbon registries, analyze satellite MRV proof, and purchase verified carbon offsets.",
-    icon: Factory,
-    badge: "Enterprise Marketplace",
-    color: "from-ocean-500/20 to-ocean-600/10",
-    borderHover: "hover:border-ocean-500/50 dark:hover:border-ocean-400/50",
-    iconBg: "bg-ocean-900/10 text-ocean-900 dark:bg-ocean-300/20 dark:text-ocean-300",
+    icon: Building2,
+    actionText: "Continue as Buyer",
+    color: "from-ocean-500/20 via-ocean-500/10 to-transparent",
+    borderHover: "hover:border-ocean-600",
+    iconBg: "bg-ocean-900/10 text-ocean-900 dark:bg-sand-100/10 dark:text-sand-50",
   },
   {
-    id: "admin",
+    id: "admin" as RoleType,
     title: "Platform Admin",
-    subtitle: "Registry Governance",
+    category: "Registry Governance",
+    badge: "Protocol Governance",
     description:
       "Oversee verifier approvals, audit blockchain telemetry records, and manage platform compliance.",
     icon: ShieldCheck,
-    badge: "Protocol Governance",
-    color: "from-amber-500/20 to-amber-600/10",
-    borderHover: "hover:border-amber-500/50 dark:hover:border-amber-400/50",
-    iconBg: "bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
+    actionText: "Continue as Admin",
+    color: "from-amber-500/20 via-amber-500/10 to-transparent",
+    borderHover: "hover:border-amber-500",
+    iconBg: "bg-amber-500/15 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300",
   },
 ];
 
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.1,
-    },
-  },
-};
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 25 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
-  },
-};
-
 export default function RoleSelectionPage() {
   const router = useRouter();
+  const [loadingRole, setLoadingRole] = useState<RoleType | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  const chooseRole = (role: string) => {
-    // Persist selected role for authentication onboarding flow
-    localStorage.setItem("selectedRole", role);
+  const addToast = (type: "success" | "error" | "info", title: string, description?: string) => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts((prev) => [...prev, { id, type, title, description }]);
+    setTimeout(() => dismissToast(id), 5000);
+  };
 
-    // Navigate to signup
-    router.push("/signup");
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const handleRoleSelect = async (role: RoleType) => {
+    setLoadingRole(role);
+
+    try {
+      // 1. Persist the chosen role locally
+      if (typeof window !== "undefined") {
+        localStorage.setItem("selectedRole", role);
+      }
+
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        // 2. If user is currently authenticated, update user_metadata in Supabase
+        if (user) {
+          const { error } = await supabase.auth.updateUser({
+            data: { role },
+          });
+
+          if (error) {
+            console.error("Failed to update role in Supabase metadata:", error.message);
+          }
+
+          // Directly route based on role selection
+          if (role === "farmer") {
+            router.push("/farmer/onboarding");
+          } else if (role === "buyer") {
+            router.push("/industry/onboarding");
+          } else if (role === "admin") {
+            router.push("/admin/dashboard");
+          }
+          return;
+        }
+      }
+
+      // 3. Unauthenticated flow -> navigate to signup/login
+      router.push("/signup");
+    } catch (err) {
+      addToast(
+        "error",
+        "Role Selection Failed",
+        err instanceof Error ? err.message : "An unexpected error occurred."
+      );
+      setLoadingRole(null);
+    }
   };
 
   return (
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
-      {/* Background ambient subtle glow */}
-      <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[900px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl opacity-70 dark:from-ocean-900/30 dark:via-mangrove-900/20" />
+      {/* Background Ambient Glow */}
+      <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[1000px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl opacity-70 dark:from-ocean-900/25 dark:via-mangrove-900/15" />
 
-      {/* Header Bar */}
-      <header className="relative z-10 container mx-auto px-6 h-20 flex items-center justify-between">
+      {/* Navigation Header */}
+      <header className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 flex h-20 items-center justify-between">
         <Link
           href="/"
           className="inline-flex items-center gap-2 text-sm font-medium text-ink/70 hover:text-ink dark:text-sand-100/70 dark:hover:text-sand-50 transition-colors"
@@ -104,17 +146,16 @@ export default function RoleSelectionPage() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 py-8 flex flex-col items-center justify-center max-w-6xl">
-        {/* Title Section */}
+      {/* Main Content Area */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center container mx-auto px-4 sm:px-6 lg:px-8 py-12 max-w-6xl">
         <motion.div
-          initial={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, y: -15 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center space-y-3 mb-12"
+          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="text-center space-y-4 mb-12 max-w-2xl"
         >
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-sm backdrop-blur-md">
-            <Leaf size={14} className="text-mangrove-600 dark:text-mangrove-400" />
+            <Sparkles size={14} className="text-mangrove-600 dark:text-mangrove-400" />
             <span className="font-mono text-xs uppercase tracking-widest text-ink-soft dark:text-sand-100/80">
               BlueCarbon Nexus Ecosystem
             </span>
@@ -124,76 +165,89 @@ export default function RoleSelectionPage() {
             Choose Your Platform Role
           </h1>
 
-          <p className="text-sm sm:text-base text-ink-soft dark:text-sand-100/70 max-w-lg mx-auto leading-relaxed">
+          <p className="text-sm sm:text-base text-ink-soft dark:text-sand-100/70 leading-relaxed">
             Select your account profile to customize your verified MRV tools, dashboards, and transaction permissions.
           </p>
         </motion.div>
 
-        {/* Roles Glassmorphic Grid */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full"
-        >
-          {ROLES.map((role) => {
+        {/* Roles Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 sm:gap-8 w-full">
+          {roles.map((role) => {
             const Icon = role.icon;
+            const isLoading = loadingRole === role.id;
 
             return (
               <motion.div
                 key={role.id}
-                variants={cardVariants}
-                whileHover={{ y: -6, transition: { duration: 0.2 } }}
-                onClick={() => chooseRole(role.id)}
-                className={`group cursor-pointer rounded-[28px] border border-ocean-900/10 bg-white/70 dark:border-sand-100/10 dark:bg-[#0a232b]/70 backdrop-blur-md p-8 shadow-soft transition-all duration-300 flex flex-col justify-between relative overflow-hidden ${role.borderHover}`}
+                whileHover={{ y: -4 }}
+                transition={{ duration: 0.2 }}
+                className={`group relative rounded-[28px] border border-ocean-900/10 dark:border-sand-100/10 bg-white/80 dark:bg-[#0a232b]/80 backdrop-blur-md p-8 shadow-soft flex flex-col justify-between transition-all duration-300 ${role.borderHover} overflow-hidden`}
               >
-                {/* Top Subtle Ambient Glow inside Card */}
+                {/* Subtle Ambient Hover Gradient */}
                 <div
-                  className={`pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-gradient-to-br ${role.color} blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500`}
+                  className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${role.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
                 />
 
-                <div>
-                  {/* Icon & Badge Row */}
-                  <div className="flex items-center justify-between mb-6">
-                    <div className={`flex h-14 w-14 items-center justify-center rounded-2xl shadow-sm transition-transform duration-300 group-hover:scale-110 ${role.iconBg}`}>
-                      <Icon size={26} strokeWidth={2} />
+                <div className="relative z-10 space-y-6">
+                  {/* Icon & Badge */}
+                  <div className="flex items-center justify-between">
+                    <div
+                      className={`flex h-12 w-12 items-center justify-center rounded-2xl ${role.iconBg} shadow-sm`}
+                    >
+                      <Icon size={24} />
                     </div>
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-ink-faint dark:text-sand-100/50 bg-sand-200/50 dark:bg-sand-100/5 px-2.5 py-1 rounded-full border border-ocean-900/5 dark:border-sand-100/5">
+
+                    <span className="font-mono text-[10px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-sand-100 dark:bg-[#071a20] border border-ocean-900/5 dark:border-sand-100/10 text-ink-soft dark:text-sand-100/70">
                       {role.badge}
                     </span>
                   </div>
 
-                  {/* Subtitle & Title */}
-                  <span className="font-mono text-[11px] uppercase tracking-widest text-mangrove-700 dark:text-mangrove-300">
-                    {role.subtitle}
-                  </span>
-                  <h2 className="mt-1 font-display text-2xl font-medium text-ink dark:text-sand-50 group-hover:text-mangrove-700 dark:group-hover:text-mangrove-300 transition-colors">
-                    {role.title}
-                  </h2>
-
-                  {/* Description */}
-                  <p className="mt-3 text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
-                    {role.description}
-                  </p>
+                  {/* Title & Description */}
+                  <div className="space-y-2">
+                    <span className="block font-mono text-xs uppercase tracking-wider text-mangrove-700 dark:text-mangrove-300 font-medium">
+                      {role.category}
+                    </span>
+                    <h2 className="font-display text-2xl font-medium text-ink dark:text-sand-50">
+                      {role.title}
+                    </h2>
+                    <p className="text-xs sm:text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
+                      {role.description}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Bottom CTA Action Bar */}
-                <div className="mt-8 pt-5 border-t border-ocean-900/5 dark:border-sand-100/5 flex items-center justify-between text-xs font-mono font-medium text-ink group-hover:text-mangrove-700 dark:text-sand-100 dark:group-hover:text-mangrove-300 transition-colors">
-                  <span>Continue as {role.id.charAt(0).toUpperCase() + role.id.slice(1)}</span>
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sand-100 dark:bg-[#071a20] group-hover:bg-mangrove-500 group-hover:text-ink transition-all duration-300">
-                    <ArrowRight size={14} className="transform group-hover:translate-x-0.5 transition-transform" />
-                  </div>
+                {/* Action Button */}
+                <div className="relative z-10 pt-8">
+                  <button
+                    type="button"
+                    onClick={() => handleRoleSelect(role.id)}
+                    disabled={loadingRole !== null}
+                    className="w-full inline-flex items-center justify-between gap-2 rounded-full border border-ocean-900/15 bg-white px-5 py-3 text-xs font-mono font-medium text-ink shadow-sm hover:bg-sand-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-mangrove-500 disabled:opacity-50 dark:border-sand-100/15 dark:bg-[#071a20] dark:text-sand-100 dark:hover:bg-[#082028]"
+                  >
+                    <span>{isLoading ? "Redirecting..." : role.actionText}</span>
+                    {isLoading ? (
+                      <Loader2 size={15} className="animate-spin" />
+                    ) : (
+                      <ArrowRight
+                        size={15}
+                        className="group-hover:translate-x-1 transition-transform"
+                      />
+                    )}
+                  </button>
                 </div>
               </motion.div>
             );
           })}
-        </motion.div>
+        </div>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 container mx-auto px-6 py-6 text-center text-xs font-mono text-ink-faint dark:text-sand-100/40">
+      {/* Footer Branding */}
+      <footer className="relative z-10 container mx-auto px-4 sm:px-6 lg:px-8 py-6 text-center text-xs text-ink-faint dark:text-sand-100/40">
         © {new Date().getFullYear()} BlueCarbon Nexus. Verified Blockchain MRV Registry.
       </footer>
+
+      {/* Toast Layer */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
