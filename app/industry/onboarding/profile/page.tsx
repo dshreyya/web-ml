@@ -54,7 +54,7 @@ const industryProfileSchema = z.object({
     .string()
     .min(6, { message: "Pincode must be 6 digits" })
     .max(6, { message: "Pincode must be 6 digits" }),
-  country: z.string().default("India"),
+  country: z.string(),
 
   // 3. Contact Person
   contactName: z.string().min(2, { message: "Full name is required" }),
