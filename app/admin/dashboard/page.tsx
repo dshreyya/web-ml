@@ -392,7 +392,7 @@ export default function AdminDashboardPage() {
                     <td className="py-4 px-4 text-right">
                       <button
                         type="button"
-                        onClick={() => router.push("/farmer/onboarding/verification")}
+                        onClick={() => router.push("/admin/projects")}
                         className="inline-flex items-center gap-1.5 rounded-xl bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-3.5 py-2 text-xs font-mono font-semibold text-sand-50 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
                       >
                         <span>Review</span>
@@ -425,6 +425,7 @@ export default function AdminDashboardPage() {
             <motion.div
               variants={itemVariants}
               whileHover={{ y: -3 }}
+              onClick={() => router.push("/admin/projects")}
               className="group rounded-[24px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft hover:bg-white dark:hover:bg-[#082028] transition-all cursor-pointer flex flex-col justify-between"
             >
               <div className="space-y-3">
@@ -447,6 +448,7 @@ export default function AdminDashboardPage() {
             <motion.div
               variants={itemVariants}
               whileHover={{ y: -3 }}
+              onClick={() => router.push("/admin/users")}
               className="group rounded-[24px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft hover:bg-white dark:hover:bg-[#082028] transition-all cursor-pointer flex flex-col justify-between"
             >
               <div className="space-y-3">
@@ -469,7 +471,7 @@ export default function AdminDashboardPage() {
             <motion.div
               variants={itemVariants}
               whileHover={{ y: -3 }}
-              onClick={() => router.push("/marketplace")}
+              onClick={() => router.push("/admin/marketplace")}
               className="group rounded-[24px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft hover:bg-white dark:hover:bg-[#082028] transition-all cursor-pointer flex flex-col justify-between"
             >
               <div className="space-y-3">
@@ -492,6 +494,7 @@ export default function AdminDashboardPage() {
             <motion.div
               variants={itemVariants}
               whileHover={{ y: -3 }}
+              onClick={() => router.push("/admin/blockchain")}
               className="group rounded-[24px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft hover:bg-white dark:hover:bg-[#082028] transition-all cursor-pointer flex flex-col justify-between"
             >
               <div className="space-y-3">
@@ -514,6 +517,7 @@ export default function AdminDashboardPage() {
             <motion.div
               variants={itemVariants}
               whileHover={{ y: -3 }}
+              onClick={() => router.push("/admin/reports")}
               className="group rounded-[24px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft hover:bg-white dark:hover:bg-[#082028] transition-all cursor-pointer flex flex-col justify-between"
             >
               <div className="space-y-3">
@@ -536,6 +540,7 @@ export default function AdminDashboardPage() {
             <motion.div
               variants={itemVariants}
               whileHover={{ y: -3 }}
+              onClick={() => router.push("/admin/settings")}
               className="group rounded-[24px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft hover:bg-white dark:hover:bg-[#082028] transition-all cursor-pointer flex flex-col justify-between"
             >
               <div className="space-y-3">
