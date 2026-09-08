@@ -19,7 +19,6 @@ import {
   Leaf,
   Globe2,
   Map,
-  ShieldAlert,
 } from "lucide-react";
 
 import { Navbar } from "@/components/navbar";
@@ -50,12 +49,13 @@ const cardVariants = {
 export default function FarmerProfilePage() {
   const router = useRouter();
 
-  // State management for geolocation demo
+  // State management for geolocation
   const [lat, setLat] = useState<string>("");
   const [lng, setLng] = useState<string>("");
   const [isLocating, setIsLocating] = useState<boolean>(false);
+  const [locationCaptured, setLocationCaptured] = useState<boolean>(false);
 
-  // State management for image upload preview demo
+  // State management for image upload preview
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
   const handleGetCurrentLocation = () => {
@@ -66,18 +66,21 @@ export default function FarmerProfilePage() {
           setLat(position.coords.latitude.toFixed(6));
           setLng(position.coords.longitude.toFixed(6));
           setIsLocating(false);
+          setLocationCaptured(true);
         },
         () => {
           // Fallback demo coordinates
           setLat("12.971598");
           setLng("77.594566");
           setIsLocating(false);
+          setLocationCaptured(true);
         }
       );
     } else {
       setLat("12.971598");
       setLng("77.594566");
       setIsLocating(false);
+      setLocationCaptured(true);
     }
   };
 
@@ -414,14 +417,14 @@ export default function FarmerProfilePage() {
             </div>
           </motion.div>
 
-          {/* Card 4 — Project Location Coordinates */}
+          {/* Card 4 — Project Location (Latitude & Longitude inputs removed) */}
           <motion.div
             variants={cardVariants}
             className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-10 shadow-soft"
           >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-mangrove-500/20 text-mangrove-800 dark:bg-mangrove-500/20 dark:text-mangrove-300">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-mangrove-500/20 text-mangrove-800 dark:bg-mangrove-500/20 dark:text-mangrove-300 shrink-0">
                   <Compass size={22} />
                 </div>
                 <div>
@@ -438,51 +441,17 @@ export default function FarmerProfilePage() {
                 type="button"
                 onClick={handleGetCurrentLocation}
                 disabled={isLocating}
-                className="inline-flex items-center justify-center gap-2 rounded-full border border-ocean-900/15 bg-white px-5 py-2.5 text-xs font-mono font-medium text-ink shadow-sm hover:bg-sand-50 transition-all dark:border-sand-100/15 dark:bg-[#071a20] dark:text-sand-100 dark:hover:bg-[#082028] disabled:opacity-50 shrink-0"
+                className="inline-flex items-center justify-center gap-2 rounded-full border border-ocean-900/15 bg-white px-5 py-2.5 text-xs font-mono font-medium text-ink shadow-sm hover:bg-sand-50 transition-all dark:border-sand-100/15 dark:bg-[#071a20] dark:text-sand-100 dark:hover:bg-[#082028] disabled:opacity-50 shrink-0 self-start sm:self-auto"
               >
                 <Map size={15} className="text-mangrove-600 dark:text-mangrove-400" />
-                <span>{isLocating ? "Fetching Coordinates..." : "Use Current Location"}</span>
+                <span>
+                  {isLocating
+                    ? "Fetching Coordinates..."
+                    : locationCaptured
+                    ? "Coordinates Captured ✓"
+                    : "Use Current Location"}
+                </span>
               </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-6">
-              {/* Latitude */}
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
-                  Latitude
-                </label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
-                    <Compass size={18} />
-                  </div>
-                  <input
-                    type="text"
-                    value={lat}
-                    onChange={(e) => setLat(e.target.value)}
-                    placeholder="e.g. 21.9497"
-                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15 font-mono"
-                  />
-                </div>
-              </div>
-
-              {/* Longitude */}
-              <div>
-                <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
-                  Longitude
-                </label>
-                <div className="relative">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
-                    <Compass size={18} />
-                  </div>
-                  <input
-                    type="text"
-                    value={lng}
-                    onChange={(e) => setLng(e.target.value)}
-                    placeholder="e.g. 88.9007"
-                    className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15 font-mono"
-                  />
-                </div>
-              </div>
             </div>
           </motion.div>
 
