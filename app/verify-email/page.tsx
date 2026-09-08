@@ -20,10 +20,21 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { ToastContainer, ToastMessage } from "@/components/ui/toast";
 import { getSupabaseClient } from "@/lib/supabase";
 
+type RoleType = "farmer" | "buyer" | "admin";
+
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const emailParam = searchParams.get("email") || "user@organization.com";
+
+  const emailParam =
+    searchParams.get("email") || "user@organization.com";
+
+  const selectedRole =
+    (searchParams.get("role") as RoleType | null) ||
+    (typeof window !== "undefined"
+      ? (localStorage.getItem("selectedRole") as RoleType | null)
+      : null) ||
+    "farmer";
 
   const [isResending, setIsResending] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
@@ -32,22 +43,52 @@ function VerifyEmailContent() {
   const [isVerified, setIsVerified] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // Countdown timer for resending verification email
+  // Keep selected role saved in localStorage
   useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (countdown > 0 && !canResend) {
-      timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev <= 1) {
-            setCanResend(true);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("selectedRole", selectedRole);
     }
-    return () => clearInterval(timer);
-  }, [countdown, canResend]);
+  }, [selectedRole]);
+
+  // ------------------------------------------------------------
+  // ROLE-BASED TEXT
+  // ------------------------------------------------------------
+
+  const getRoleName = () => {
+    if (selectedRole === "buyer") {
+      return "Industry Buyer";
+    }
+
+    if (selectedRole === "admin") {
+      return "Administrator";
+    }
+
+    return "Farmer";
+  };
+
+  const getAccountName = () => {
+    if (selectedRole === "buyer") {
+      return "industry account";
+    }
+
+    if (selectedRole === "admin") {
+      return "administrator account";
+    }
+
+    return "farmer account";
+  };
+
+  const getLoginPath = () => {
+    return `/login?role=${encodeURIComponent(selectedRole)}`;
+  };
+
+  const getSignupPath = () => {
+    return `/signup?role=${encodeURIComponent(selectedRole)}`;
+  };
+
+  // ------------------------------------------------------------
+  // TOAST
+  // ------------------------------------------------------------
 
   const addToast = (
     type: "success" | "error" | "info",
@@ -55,7 +96,16 @@ function VerifyEmailContent() {
     description?: string
   ) => {
     const id = Math.random().toString(36).substring(2, 9);
-    setToasts((prev) => [...prev, { id, type, title, description }]);
+
+    setToasts((prev) => [
+      ...prev,
+      {
+        id,
+        type,
+        title,
+        description,
+      },
+    ]);
 
     setTimeout(() => {
       dismissToast(id);
@@ -66,10 +116,42 @@ function VerifyEmailContent() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
+  // ------------------------------------------------------------
+  // COUNTDOWN TIMER
+  // ------------------------------------------------------------
+
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+
+    if (countdown > 0 && !canResend) {
+      timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            setCanResend(true);
+            return 0;
+          }
+
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (timer) {
+        clearInterval(timer);
+      }
+    };
+  }, [countdown, canResend]);
+
+  // ------------------------------------------------------------
+  // RESEND VERIFICATION EMAIL
+  // ------------------------------------------------------------
+
   const handleResendEmail = async () => {
     if (!canResend) return;
 
     setIsResending(true);
+
     try {
       const supabase = getSupabaseClient();
 
@@ -78,29 +160,40 @@ function VerifyEmailContent() {
           type: "signup",
           email: emailParam,
           options: {
-            emailRedirectTo: `${window.location.origin}/login`,
+            emailRedirectTo: `${
+              window.location.origin
+            }/login?role=${encodeURIComponent(selectedRole)}`,
           },
         });
 
         if (error) {
-          addToast("error", "Resend Failed", error.message);
+          addToast(
+            "error",
+            "Resend Failed",
+            error.message
+          );
         } else {
           addToast(
             "success",
             "Verification Email Sent",
-            `A fresh verification link was dispatched to ${emailParam}.`
+            `A fresh verification link was sent to ${emailParam}.`
           );
+
           setCanResend(false);
           setCountdown(60);
         }
       } else {
         // Demonstration fallback mode
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1000)
+        );
+
         addToast(
           "success",
           "Verification Link Sent",
           `A new verification link has been sent to ${emailParam}.`
         );
+
         setCanResend(false);
         setCountdown(60);
       }
@@ -108,12 +201,18 @@ function VerifyEmailContent() {
       addToast(
         "error",
         "An unexpected error occurred",
-        err instanceof Error ? err.message : "Please try again later."
+        err instanceof Error
+          ? err.message
+          : "Please try again later."
       );
     } finally {
       setIsResending(false);
     }
   };
+
+  // ------------------------------------------------------------
+  // CHECK VERIFICATION
+  // ------------------------------------------------------------
 
   const handleCheckVerification = async () => {
     setIsChecking(true);
@@ -122,56 +221,72 @@ function VerifyEmailContent() {
       const supabase = getSupabaseClient();
 
       if (supabase) {
-        // Refresh session to check user status
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
         if (user && user.email_confirmed_at) {
           setIsVerified(true);
+
           addToast(
             "success",
             "Email Verified!",
-            "Your account is active. Redirecting to login..."
+            `Your ${getAccountName()} is active. Redirecting to ${getRoleName()} login...`
           );
+
           setTimeout(() => {
-            router.push("/login");
+            router.push(getLoginPath());
           }, 2000);
         } else {
           addToast(
             "info",
             "Verification Pending",
-            "We haven't detected your email confirmation yet. Please click the link in your email inbox."
+            "We haven't detected your email confirmation yet. Please click the verification link in your email inbox."
           );
         }
       } else {
         // Demonstration verification check
-        await new Promise((resolve) => setTimeout(resolve, 1200));
+        await new Promise((resolve) =>
+          setTimeout(resolve, 1200)
+        );
+
         setIsVerified(true);
+
         addToast(
           "success",
           "Email Verified Successfully",
-          "Your BlueCarbon Nexus account is now active. Redirecting to login portal..."
+          `Your ${getAccountName()} is now active. Redirecting to ${getRoleName()} login...`
         );
+
         setTimeout(() => {
-          router.push("/login");
+          router.push(getLoginPath());
         }, 2000);
       }
     } catch (err) {
       addToast(
         "error",
         "Check Failed",
-        err instanceof Error ? err.message : "Unable to verify email status."
+        err instanceof Error
+          ? err.message
+          : "Unable to verify email status."
       );
     } finally {
       setIsChecking(false);
     }
   };
 
+  // ------------------------------------------------------------
+  // UI
+  // ------------------------------------------------------------
+
   return (
     <div className="w-full max-w-md">
       {/* Main Card */}
       <div className="rounded-[28px] border border-ocean-900/10 bg-white p-8 sm:p-10 shadow-soft dark:border-sand-100/10 dark:bg-[#0a232b]">
         {isVerified ? (
-          /* Verified Success State */
+          /* ---------------------------------------------------
+             VERIFIED SUCCESS STATE
+          --------------------------------------------------- */
           <div className="py-6 text-center space-y-4">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-mangrove-100 text-mangrove-700 dark:bg-mangrove-900/40 dark:text-mangrove-300">
               <CheckCircle2 size={34} />
@@ -181,41 +296,52 @@ function VerifyEmailContent() {
               <span className="font-mono text-[11px] uppercase tracking-widest2 text-mangrove-700 dark:text-mangrove-300">
                 Email Verified
               </span>
+
               <h2 className="mt-1 font-display text-2xl font-medium text-ink dark:text-sand-50">
                 Account Activated!
               </h2>
             </div>
 
             <p className="text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
-              Your email address has been verified. You now have full access to the BlueCarbon Nexus MRV portal and asset registry.
+              Your email address has been verified successfully.
+              Your {getRoleName()} account is now active.
             </p>
 
             <div className="pt-4">
               <Link
-                href="/login"
+                href={getLoginPath()}
                 className="w-full inline-flex items-center justify-center gap-2 rounded-full bg-ocean-900 px-6 py-3.5 text-sm font-medium text-sand-50 shadow-md hover:bg-ocean-700 transition-colors dark:bg-mangrove-500 dark:text-ink dark:hover:bg-mangrove-300"
               >
                 <ShieldCheck size={18} />
-                <span>Continue to Sign In</span>
+
+                <span>
+                  Continue to {getRoleName()} Login
+                </span>
               </Link>
             </div>
           </div>
         ) : (
-          /* Pending Email Verification Interface */
+          /* ---------------------------------------------------
+             PENDING EMAIL VERIFICATION
+          --------------------------------------------------- */
           <div>
             {/* Header Icon & Branding */}
             <div className="flex flex-col items-center text-center">
               <div className="relative">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-ocean-100 text-ocean-900 shadow-card dark:bg-ocean-900/60 dark:text-mangrove-300">
-                  <MailCheck size={30} strokeWidth={2} />
+                  <MailCheck
+                    size={30}
+                    strokeWidth={2}
+                  />
                 </div>
+
                 <div className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-mangrove-500 text-ink text-xs font-bold shadow">
                   <Leaf size={12} />
                 </div>
               </div>
 
               <span className="mt-4 font-mono text-[11px] uppercase tracking-widest2 text-mangrove-700 dark:text-mangrove-300">
-                Security Checklist
+                {getRoleName()} Security Checklist
               </span>
 
               <h1 className="mt-2 font-display text-2xl sm:text-3xl font-medium tracking-tight text-ink dark:text-sand-50">
@@ -223,7 +349,9 @@ function VerifyEmailContent() {
               </h1>
 
               <p className="mt-2 text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
-                We have sent a verification link to activate your enterprise account. Please check your inbox and click the button to proceed.
+                We have sent a verification link to activate
+                your {getAccountName()}. Please check your inbox
+                and click the verification link to proceed.
               </p>
             </div>
 
@@ -233,10 +361,12 @@ function VerifyEmailContent() {
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-ocean-900/10 text-ocean-900 dark:bg-sand-100/10 dark:text-sand-100">
                   <Mail size={18} />
                 </div>
+
                 <div className="min-w-0">
                   <p className="text-[11px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/60">
                     Sent to
                   </p>
+
                   <p className="text-sm font-semibold text-ink dark:text-sand-50 truncate">
                     {emailParam}
                   </p>
@@ -265,18 +395,27 @@ function VerifyEmailContent() {
               >
                 {isChecking ? (
                   <>
-                    <Loader2 size={18} className="animate-spin" />
-                    <span>Checking Status...</span>
+                    <Loader2
+                      size={18}
+                      className="animate-spin"
+                    />
+
+                    <span>
+                      Checking Status...
+                    </span>
                   </>
                 ) : (
                   <>
                     <ShieldCheck size={18} />
-                    <span>I&apos;ve Verified My Email</span>
+
+                    <span>
+                      I&apos;ve Verified My Email
+                    </span>
                   </>
                 )}
               </button>
 
-              {/* Resend Verification Email Button */}
+              {/* Resend Verification Email */}
               <button
                 type="button"
                 onClick={handleResendEmail}
@@ -285,12 +424,19 @@ function VerifyEmailContent() {
               >
                 {isResending ? (
                   <>
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>Resending Link...</span>
+                    <Loader2
+                      size={16}
+                      className="animate-spin"
+                    />
+
+                    <span>
+                      Resending Link...
+                    </span>
                   </>
                 ) : (
                   <>
                     <RefreshCw size={15} />
+
                     <span>
                       {canResend
                         ? "Resend Verification Email"
@@ -301,11 +447,11 @@ function VerifyEmailContent() {
               </button>
             </div>
 
-            {/* Change Email or Back to Signup Link */}
+            {/* Wrong Email / Return to Signup */}
             <div className="mt-8 text-center text-xs text-ink-soft dark:text-sand-100/70">
               Entered the wrong email address?{" "}
               <Link
-                href="/signup"
+                href={getSignupPath()}
                 className="font-medium text-mangrove-700 hover:underline dark:text-mangrove-300"
               >
                 Return to Signup
@@ -315,16 +461,23 @@ function VerifyEmailContent() {
         )}
       </div>
 
-      {/* Toast Notification Component */}
-      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+      {/* Toast Notifications */}
+      <ToastContainer
+        toasts={toasts}
+        onDismiss={dismissToast}
+      />
     </div>
   );
 }
 
+// ------------------------------------------------------------
+// PAGE
+// ------------------------------------------------------------
+
 export default function VerifyEmailPage() {
   return (
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden">
-      {/* Background ambient subtle glow */}
+      {/* Background Ambient Glow */}
       <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-gradient-to-b from-ocean-300/10 via-mangrove-300/10 to-transparent blur-3xl opacity-60 dark:from-ocean-900/20 dark:via-mangrove-900/20" />
 
       {/* Header */}
@@ -334,7 +487,10 @@ export default function VerifyEmailPage() {
           className="inline-flex items-center gap-2 text-sm font-medium text-ink/70 hover:text-ink dark:text-sand-100/70 dark:hover:text-sand-50 transition-colors"
         >
           <ArrowLeft size={16} />
-          <span>Back to Signup</span>
+
+          <span>
+            Back to Signup
+          </span>
         </Link>
 
         <div className="flex items-center gap-3">
@@ -347,13 +503,20 @@ export default function VerifyEmailPage() {
         <motion.div
           initial={{ opacity: 1, y: 0 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          transition={{
+            duration: 0.5,
+            ease: [0.16, 1, 0.3, 1],
+          }}
           className="w-full max-w-md"
         >
           <Suspense
             fallback={
               <div className="flex items-center justify-center p-12 text-center text-sm text-ink-soft dark:text-sand-100/70">
-                <Loader2 size={24} className="animate-spin text-ocean-900 dark:text-mangrove-300 mr-2" />
+                <Loader2
+                  size={24}
+                  className="animate-spin text-ocean-900 dark:text-mangrove-300 mr-2"
+                />
+
                 Loading verification portal...
               </div>
             }
