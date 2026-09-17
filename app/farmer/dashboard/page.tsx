@@ -56,17 +56,17 @@ export default function FarmerDashboardPage() {
       {/* Global Navbar */}
       <Navbar />
 
-      {/* Main Content Area — Increased spacing to space-y-10 for breathing room */}
+      {/* Main Content Area */}
       <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 lg:px-8 pt-28 sm:pt-36 pb-16 max-w-7xl space-y-10">
         
-        {/* HERO SECTION — Visual Gradient Graphic Accent & Hero Typography */}
+        {/* HERO SECTION */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
           className="relative overflow-hidden rounded-[32px] border border-ocean-900/10 bg-gradient-to-br from-white/90 via-sand-50/80 to-mangrove-500/15 dark:border-sand-100/10 dark:from-[#0a232b]/95 dark:via-[#071a20]/90 dark:to-mangrove-950/30 backdrop-blur-xl p-6 sm:p-10 shadow-card"
         >
-          {/* Subtle Dynamic Ambient Mesh & Grid Background */}
+          {/* Ambient Mesh & Grid Background */}
           <div className="pointer-events-none absolute -right-12 -top-12 h-72 w-72 rounded-full bg-gradient-to-br from-mangrove-400/25 via-ocean-500/20 to-transparent blur-3xl" />
           <div className="pointer-events-none absolute -left-12 -bottom-12 h-48 w-48 rounded-full bg-gradient-to-tr from-ocean-500/15 to-transparent blur-2xl" />
 
@@ -265,7 +265,7 @@ export default function FarmerDashboardPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                 <div className="p-4 rounded-2xl bg-sand-50/70 dark:bg-[#071a20]/60 border border-ocean-900/5 dark:border-sand-100/5">
                   <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
                     Project Name
@@ -293,9 +293,21 @@ export default function FarmerDashboardPage() {
                   </span>
                 </div>
               </div>
+
+              {/* View Project Action Button */}
+              <div className="flex justify-end pt-2 border-t border-ocean-900/5 dark:border-sand-100/5">
+                <button
+                  type="button"
+                  onClick={() => router.push("/farmer/projects/primary-project")}
+                  className="inline-flex items-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-5 py-2.5 text-xs font-mono uppercase tracking-wider font-semibold text-sand-50 shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
+                >
+                  <span>View Project</span>
+                  <ArrowRight size={14} />
+                </button>
+              </div>
             </motion.div>
 
-            {/* RECENT ACTIVITY TIMELINE (Compact Height) */}
+            {/* RECENT ACTIVITY TIMELINE */}
             <motion.div
               variants={itemVariants}
               className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-7 shadow-soft"
@@ -460,7 +472,7 @@ export default function FarmerDashboardPage() {
               </div>
             </motion.div>
 
-            {/* DISTINCT QUICK ACTIONS WIDGET */}
+            {/* QUICK ACTIONS WIDGET */}
             <motion.div
               variants={itemVariants}
               className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft space-y-4"
@@ -506,7 +518,7 @@ export default function FarmerDashboardPage() {
               </div>
             </motion.div>
 
-            {/* COMPACT NOTIFICATIONS WIDGET */}
+            {/* NOTIFICATIONS WIDGET */}
             <motion.div
               variants={itemVariants}
               className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft space-y-3"
