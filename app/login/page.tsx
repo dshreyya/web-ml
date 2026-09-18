@@ -65,22 +65,11 @@ export default function LoginPage() {
   // SELECTED ROLE
   // ===================================================
 
-  /*
-   * First check URL:
-   *
-   * /login?role=farmer
-   * /login?role=buyer
-   * /login?role=admin
-   *
-   * If URL doesn't contain role, check localStorage.
-   */
-
   const [selectedRole, setSelectedRole] =
     useState<string>("farmer");
 
   useEffect(() => {
-    const roleFromUrl =
-      searchParams.get("role");
+    const roleFromUrl = searchParams.get("role");
 
     const roleFromStorage =
       typeof window !== "undefined"
@@ -94,7 +83,6 @@ export default function LoginPage() {
 
     setSelectedRole(role);
 
-    // Keep localStorage synchronized
     if (typeof window !== "undefined") {
       localStorage.setItem(
         "selectedRole",
@@ -156,7 +144,7 @@ export default function LoginPage() {
   // ROLE REDIRECT
   // ===================================================
 
-  const handleRoleRedirect = (
+  const handleRoleRedirect = async (
     userRole?: string
   ) => {
     const role =
@@ -167,21 +155,284 @@ export default function LoginPage() {
       role
     );
 
+    // =================================================
+    // FARMER
+    // =================================================
+
     if (role === "farmer") {
       router.push(
         "/farmer/onboarding"
       );
-    } else if (role === "buyer") {
-      router.push(
-        "/industry/onboarding"
+
+      return;
+    }
+
+    // =================================================
+    // INDUSTRY
+    // =================================================
+
+    if (role === "buyer") {
+      console.log(
+        "Checking industry onboarding status..."
       );
-    } else if (role === "admin") {
+
+      const supabase =
+        getSupabaseClient();
+
+      if (!supabase) {
+        console.error(
+          "Supabase client unavailable."
+        );
+
+        router.push(
+          "/industry/onboarding"
+        );
+
+        return;
+      }
+
+      try {
+        // =============================================
+        // GET CURRENT USER
+        // =============================================
+
+        const {
+          data: {
+            user,
+          },
+          error: userError,
+        } =
+          await supabase.auth.getUser();
+
+        if (userError || !user) {
+          console.error(
+            "Unable to get logged-in user:",
+            userError?.message
+          );
+
+          router.push(
+            "/login?role=buyer"
+          );
+
+          return;
+        }
+
+        console.log(
+          "Industry user ID:",
+          user.id
+        );
+
+        // =============================================
+        // GET THIS USER'S INDUSTRY PROFILE
+        // =============================================
+
+        const {
+          data: profile,
+          error: profileError,
+        } =
+          await supabase
+            .from("industry_profiles")
+            .select(
+              "id, onboarding_status"
+            )
+            .eq(
+              "user_id",
+              user.id
+            )
+            .maybeSingle();
+
+        if (profileError) {
+          console.error(
+            "Industry profile error:",
+            profileError
+          );
+
+          addToast(
+            "error",
+            "Unable to Load Profile",
+            profileError.message
+          );
+
+          router.push(
+            "/industry/onboarding"
+          );
+
+          return;
+        }
+
+        // =============================================
+        // NO PROFILE
+        // =============================================
+
+        if (!profile) {
+          console.log(
+            "No industry profile found."
+          );
+
+          router.push(
+            "/industry/onboarding"
+          );
+
+          return;
+        }
+
+        const status =
+          profile.onboarding_status;
+
+        console.log(
+          "Industry profile ID:",
+          profile.id
+        );
+
+        console.log(
+          "Industry onboarding status:",
+          status
+        );
+
+        // =============================================
+        // APPROVED
+        // =============================================
+
+        if (status === "APPROVED") {
+          console.log(
+            "Industry account approved."
+          );
+
+          console.log(
+            "Redirecting to industry dashboard."
+          );
+
+          router.push(
+            "/industry/dashboard"
+          );
+
+          return;
+        }
+
+        // =============================================
+        // PENDING VERIFICATION
+        // =============================================
+
+        if (
+          status ===
+          "PENDING_VERIFICATION"
+        ) {
+          console.log(
+            "Industry application is pending Authority verification."
+          );
+
+          router.push(
+            "/industry/onboarding/verification"
+          );
+
+          return;
+        }
+
+        // =============================================
+        // PENDING DOCUMENTS
+        // =============================================
+
+        if (
+          status ===
+          "PENDING_DOCUMENTS"
+        ) {
+          console.log(
+            "Industry documents are pending."
+          );
+
+          router.push(
+            "/industry/onboarding/documents"
+          );
+
+          return;
+        }
+
+        // =============================================
+        // REJECTED
+        // =============================================
+
+        if (
+          status === "REJECTED"
+        ) {
+          console.log(
+            "Industry application was rejected."
+          );
+
+          router.push(
+            "/industry/onboarding/verification"
+          );
+
+          return;
+        }
+
+        // =============================================
+        // DRAFT
+        // =============================================
+
+        if (
+          status === "DRAFT"
+        ) {
+          console.log(
+            "Industry profile is still a draft."
+          );
+
+          router.push(
+            "/industry/onboarding/profile"
+          );
+
+          return;
+        }
+
+        // =============================================
+        // UNKNOWN STATUS
+        // =============================================
+
+        console.log(
+          "Unknown onboarding status:",
+          status
+        );
+
+        router.push(
+          "/industry/onboarding"
+        );
+
+      } catch (error) {
+        console.error(
+          "Industry redirect error:",
+          error
+        );
+
+        addToast(
+          "error",
+          "Unable to Load Account",
+          "We could not determine your Industry account status."
+        );
+
+        router.push(
+          "/industry/onboarding"
+        );
+      }
+
+      return;
+    }
+
+    // =================================================
+    // ADMIN
+    // =================================================
+
+    if (role === "admin") {
       router.push(
         "/admin/dashboard"
       );
-    } else {
-      router.push("/");
+
+      return;
     }
+
+    // =================================================
+    // UNKNOWN ROLE
+    // =================================================
+
+    router.push("/");
   };
 
   // ===================================================
@@ -308,8 +559,18 @@ export default function LoginPage() {
         const user =
           authData.user;
 
+        if (!user) {
+          addToast(
+            "error",
+            "Authentication Failed",
+            "No authenticated user was returned by Supabase."
+          );
+
+          return;
+        }
+
         const userRole =
-          user?.user_metadata?.role;
+          user.user_metadata?.role;
 
         console.log(
           "Selected portal:",
@@ -325,15 +586,6 @@ export default function LoginPage() {
         // IMPORTANT ROLE CHECK
         // ===============================================
 
-        /*
-         * Example:
-         *
-         * Selected portal = buyer
-         * Account role     = farmer
-         *
-         * This must NOT be allowed.
-         */
-
         if (
           userRole !== selectedRole
         ) {
@@ -341,7 +593,6 @@ export default function LoginPage() {
             "ROLE MISMATCH"
           );
 
-          // Sign the wrong account out
           await supabase.auth.signOut();
 
           let actualRoleName =
@@ -383,7 +634,10 @@ export default function LoginPage() {
           "Successfully authenticated with BlueCarbon Nexus. Redirecting..."
         );
 
-        // Remember email
+        // ===============================================
+        // REMEMBER EMAIL
+        // ===============================================
+
         if (data.rememberMe) {
           localStorage.setItem(
             "bcn_remember_email",
@@ -395,12 +649,16 @@ export default function LoginPage() {
           );
         }
 
-        // Redirect
-        setTimeout(() => {
-          handleRoleRedirect(
+        // ===============================================
+        // REDIRECT
+        // ===============================================
+
+        setTimeout(async () => {
+          await handleRoleRedirect(
             userRole
           );
         }, 1000);
+
       } else {
         // =================================================
         // DEMONSTRATION / FALLBACK MODE
@@ -408,7 +666,10 @@ export default function LoginPage() {
 
         await new Promise(
           (resolve) =>
-            setTimeout(resolve, 1200)
+            setTimeout(
+              resolve,
+              1200
+            )
         );
 
         addToast(
@@ -422,12 +683,17 @@ export default function LoginPage() {
             "bcn_remember_email",
             data.email
           );
+        } else {
+          localStorage.removeItem(
+            "bcn_remember_email"
+          );
         }
 
-        setTimeout(() => {
-          handleRoleRedirect();
+        setTimeout(async () => {
+          await handleRoleRedirect();
         }, 1000);
       }
+
     } catch (err) {
       console.error(
         "Login error:",
@@ -460,9 +726,10 @@ export default function LoginPage() {
 
         if (supabase) {
           /*
-           * Preserve the selected role
+           * Preserve selected role
            * during Google OAuth.
            */
+
           const {
             error,
           } =
@@ -486,6 +753,7 @@ export default function LoginPage() {
               error.message
             );
           }
+
         } else {
           await new Promise(
             (resolve) =>
@@ -501,6 +769,7 @@ export default function LoginPage() {
             "Connect Supabase credentials to enable live Google authentication."
           );
         }
+
       } catch (err) {
         console.error(
           "Google login error:",
@@ -550,6 +819,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden">
 
       {/* Background Glow */}
+
       <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[500px] w-[800px] rounded-full bg-gradient-to-b from-ocean-300/10 via-mangrove-300/10 to-transparent blur-3xl opacity-60 dark:from-ocean-900/20 dark:via-mangrove-900/20" />
 
       {/* =================================================

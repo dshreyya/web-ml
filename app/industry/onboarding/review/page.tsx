@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -12,232 +12,534 @@ import {
   ShieldCheck,
   CheckCircle,
   FileText,
-  Building,
-  Mail,
-  Phone,
-  Globe,
   Loader2,
   Edit3,
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getSupabaseClient } from "@/lib/supabase";
+
+interface IndustryProfile {
+  company_name: string | null;
+  cin_number: string | null;
+  gst_number: string | null;
+  industry_type: string | null;
+}
+
+interface IndustryDocument {
+  id: string;
+  document_type: string;
+  file_name: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  uploaded_at: string | null;
+}
+
+const DOCUMENT_LABELS: Record<string, string> = {
+  companyRegistration: "Company Registration Certificate",
+  gstCertificate: "GST Certificate",
+  pcbCertificate: "Pollution Control Board Certificate",
+  environmentalClearance: "Environmental Clearance",
+  carbonAuditReport: "Annual Carbon Audit Report",
+  esgReport: "ESG / Sustainability Report",
+  authorizationLetter: "Authorization Letter",
+  additionalDocs: "Additional Document",
+};
+
+const REQUIRED_DOCUMENTS = [
+  "companyRegistration",
+  "gstCertificate",
+  "pcbCertificate",
+  "carbonAuditReport",
+  "authorizationLetter",
+];
 
 export default function IndustryReviewPage() {
   const router = useRouter();
+
+  const [profile, setProfile] = useState<IndustryProfile | null>(null);
+  const [documents, setDocuments] = useState<IndustryDocument[]>([]);
+
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState("");
 
-  const handleFinalSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    const loadReviewData = async () => {
+      const supabase = getSupabaseClient();
+
+      if (!supabase) {
+        setError("Unable to connect to Supabase.");
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          router.push("/login");
+          return;
+        }
+
+        const [profileResult, documentsResult] = await Promise.all([
+          supabase
+            .from("industry_profiles")
+            .select(
+              "company_name, cin_number, gst_number, industry_type"
+            )
+            .eq("user_id", user.id)
+            .maybeSingle(),
+
+          supabase
+            .from("industry_documents")
+            .select(
+              "id, document_type, file_name, status, uploaded_at"
+            )
+            .eq("user_id", user.id)
+            .order("uploaded_at", { ascending: true }),
+        ]);
+
+        if (profileResult.error) {
+          throw profileResult.error;
+        }
+
+        if (documentsResult.error) {
+          throw documentsResult.error;
+        }
+
+        if (!profileResult.data) {
+          setError(
+            "Industry profile not found. Please complete your company profile first."
+          );
+          setIsLoading(false);
+          return;
+        }
+
+        setProfile(profileResult.data);
+        setDocuments(documentsResult.data || []);
+      } catch (err) {
+        console.error("Review page error:", err);
+
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load your application details."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadReviewData();
+  }, [router]);
+
+  const hasAllRequiredDocuments = REQUIRED_DOCUMENTS.every((requiredType) =>
+    documents.some(
+      (document) =>
+        document.document_type === requiredType &&
+        document.status !== "REJECTED"
+    )
+  );
+
+  const getDocumentLabel = (documentType: string) => {
+    return DOCUMENT_LABELS[documentType] || "Document";
+  };
+
+  const getStatusStyle = (status: IndustryDocument["status"]) => {
+    if (status === "APPROVED") {
+      return "bg-emerald-500/10 text-emerald-600 border-emerald-500/20";
+    }
+
+    if (status === "REJECTED") {
+      return "bg-red-500/10 text-red-600 border-red-500/20";
+    }
+
+    return "bg-amber-500/10 text-amber-600 border-amber-500/20";
+  };
+
+  const handleFinalSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
     if (!agreedToTerms) {
-      setError("Please confirm that all submitted details are accurate before proceeding.");
+      setError(
+        "Please confirm that all submitted details are accurate before proceeding."
+      );
+      return;
+    }
+
+    if (!profile) {
+      setError("Company profile information is missing.");
+      return;
+    }
+
+    if (!hasAllRequiredDocuments) {
+      setError(
+        "Please upload all required documents before submitting your application."
+      );
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      setError("Unable to connect to Supabase.");
       return;
     }
 
     setIsSubmitting(true);
     setError("");
 
-    // Simulate final submission API call
-    setTimeout(() => {
-      setIsSubmitting(false);
-      // Navigate to step 4 (Verification Status)
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        router.push("/login");
+        return;
+      }
+
+      const { error: updateError } = await supabase
+        .from("industry_profiles")
+        .update({
+          onboarding_status: "PENDING_VERIFICATION",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id);
+
+      if (updateError) {
+        throw updateError;
+      }
+
       router.push("/industry/onboarding/verification");
-    }, 1500);
+    } catch (err) {
+      console.error("Final submission error:", err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Failed to submit your application."
+      );
+
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
-      {/* Background Ambient Glow */}
-      <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[900px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl opacity-70 dark:from-ocean-900/25 dark:via-mangrove-900/15" />
-
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <header className="relative z-10 border-b border-ocean-900/5 dark:border-sand-100/5 bg-white/40 dark:bg-[#061418]/40 backdrop-blur-md">
-        <div className="container-page section-pad flex h-20 items-center justify-between">
+      <header className="border-b border-border/60 bg-background/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
           <Link
             href="/industry/onboarding/documents"
-            className="inline-flex items-center gap-2 text-sm font-medium text-ink/70 hover:text-ink dark:text-sand-100/70 dark:hover:text-sand-50 transition-colors"
+            className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            <ArrowLeft size={16} />
-            <span>Back to Upload Filings</span>
+            <ArrowLeft className="h-4 w-4" />
+            Back to Documents
           </Link>
 
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-          </div>
+          <ThemeToggle />
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="relative z-10 flex-1 container-page section-pad py-10 max-w-4xl mx-auto">
-        {/* Step Indicator Bar */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 rounded-2xl border border-ocean-900/10 bg-white/80 p-4 shadow-sm dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-4"
-        >
+      {/* Main */}
+      <main className="mx-auto max-w-5xl px-6 py-10">
+        {/* Step indicator */}
+        <div className="mb-8 flex items-center justify-center">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink font-semibold text-sm shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
               03.5
             </div>
+
             <div>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-mangrove-700 dark:text-mangrove-300 font-semibold block">
-                Final Review Step
-              </span>
-              <h2 className="text-base font-semibold text-ink dark:text-sand-50">
+              <p className="text-sm font-semibold">Final Review Step</p>
+              <p className="text-xs text-muted-foreground">
                 Confirm Application Details
-              </h2>
+              </p>
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-2 text-xs font-mono text-ink-soft dark:text-sand-100/70">
-            <ShieldCheck size={16} className="text-emerald-500" />
-            <span>Ready for Review</span>
+        {/* Page heading */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-10 text-center"
+        >
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10">
+            <ShieldCheck className="h-7 w-7 text-primary" />
           </div>
+
+          <h1 className="text-3xl font-bold tracking-tight">
+            Review Your Application
+          </h1>
+
+          <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
+            Review your company information and uploaded documents before
+            submitting your application for authority verification.
+          </p>
         </motion.div>
 
-        {/* Page Header */}
-        <div className="text-center max-w-xl mx-auto mb-10">
-          <span className="font-mono text-xs uppercase tracking-widest text-mangrove-700 dark:text-mangrove-300 font-medium">
-            Step 3 of 4 Complete
-          </span>
-          <h1 className="mt-2 font-display text-3xl sm:text-4xl font-medium tracking-tight text-ink dark:text-sand-50">
-            Review Your Compliance Dossier
-          </h1>
-          <p className="mt-2 text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
-            Please verify your business profile and uploaded compliance documents before submitting for regulatory clearance.
-          </p>
-        </div>
+        {/* Error */}
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-600">
+            {error}
+          </div>
+        )}
 
-        {/* Review Sections */}
-        <div className="space-y-6">
-          {/* Company Profile Card */}
-          <div className="rounded-2xl border border-ocean-900/10 bg-white/90 dark:border-sand-100/10 dark:bg-[#0a232b]/90 backdrop-blur-xl p-6 shadow-soft">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
-              <div className="flex items-center gap-2.5">
-                <Building2 className="text-ocean-900 dark:text-mangrove-300" size={20} />
-                <h3 className="font-semibold text-base text-ink dark:text-sand-50">Company Profile Overview</h3>
-              </div>
-              <Link
-                href="/industry/onboarding/profile"
-                className="inline-flex items-center gap-1 text-xs font-medium text-mangrove-700 hover:text-mangrove-800 dark:text-mangrove-300 dark:hover:text-mangrove-200"
-              >
-                <Edit3 size={14} />
-                <span>Edit</span>
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div>
-                <span className="block text-ink-faint dark:text-sand-100/40 uppercase font-mono">Company Name</span>
-                <span className="font-medium text-ink dark:text-sand-50 text-sm">Acme Climate Solutions Ltd.</span>
-              </div>
-              <div>
-                <span className="block text-ink-faint dark:text-sand-100/40 uppercase font-mono">Registration / CIN</span>
-                <span className="font-medium text-ink dark:text-sand-50 font-mono text-sm">U74999MH2024PTC123456</span>
-              </div>
-              <div>
-                <span className="block text-ink-faint dark:text-sand-100/40 uppercase font-mono">GST Identification</span>
-                <span className="font-medium text-ink dark:text-sand-50 font-mono text-sm">27AAAAA0000A1Z5</span>
-              </div>
-              <div>
-                <span className="block text-ink-faint dark:text-sand-100/40 uppercase font-mono">Industry Sector</span>
-                <span className="font-medium text-ink dark:text-sand-50 text-sm">Manufacturing & Power Generation</span>
-              </div>
+        {isLoading ? (
+          <div className="flex min-h-[300px] items-center justify-center">
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">
+                Loading your application...
+              </p>
             </div>
           </div>
-
-          {/* Uploaded Filings Summary Card */}
-          <div className="rounded-2xl border border-ocean-900/10 bg-white/90 dark:border-sand-100/10 dark:bg-[#0a232b]/90 backdrop-blur-xl p-6 shadow-soft">
-            <div className="flex items-center justify-between pb-4 mb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
-              <div className="flex items-center gap-2.5">
-                <FileCheck className="text-ocean-900 dark:text-mangrove-300" size={20} />
-                <h3 className="font-semibold text-base text-ink dark:text-sand-50">Uploaded Filings & Permits</h3>
-              </div>
-              <Link
-                href="/industry/onboarding/documents"
-                className="inline-flex items-center gap-1 text-xs font-medium text-mangrove-700 hover:text-mangrove-800 dark:text-mangrove-300 dark:hover:text-mangrove-200"
-              >
-                <Edit3 size={14} />
-                <span>Edit Files</span>
-              </Link>
-            </div>
-
-            <ul className="space-y-3">
-              {[
-                { title: "Company Registration Certificate", filename: "Certificate_of_Incorporation.pdf", status: "Uploaded" },
-                { title: "GST Certificate", filename: "GST_REG_06_Acme.pdf", status: "Uploaded" },
-                { title: "Pollution Control Board Certificate", filename: "PCB_ConsentToOperate_2026.pdf", status: "Uploaded" },
-                { title: "Annual Carbon Audit Report", filename: "ISO_14064_Audit_Report.pdf", status: "Uploaded" },
-                { title: "Authorization Letter", filename: "Board_Resolution_Auth.pdf", status: "Uploaded" },
-              ].map((item, idx) => (
-                <li
-                  key={idx}
-                  className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/70 border border-ocean-900/5 dark:border-sand-100/5 text-xs"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText size={16} className="text-mangrove-600 dark:text-mangrove-400" />
-                    <div>
-                      <span className="font-medium text-ink dark:text-sand-50 block">{item.title}</span>
-                      <span className="text-ink-faint dark:text-sand-100/40 font-mono">{item.filename}</span>
-                    </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Company Profile */}
+            <motion.section
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm"
+            >
+              <div className="mb-6 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
+                    <Building2 className="h-5 w-5 text-primary" />
                   </div>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
-                    <CheckCircle size={12} />
-                    <span>{item.status}</span>
+
+                  <div>
+                    <h2 className="font-semibold">Company Profile</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Your registered industry details
+                    </p>
+                  </div>
+                </div>
+
+                <Link
+                  href="/industry/onboarding/profile"
+                  className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
+                >
+                  <Edit3 className="h-4 w-4" />
+                  Edit
+                </Link>
+              </div>
+
+              {profile && (
+                <div className="grid gap-5 sm:grid-cols-2">
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Company Name
+                    </p>
+                    <p className="font-medium">
+                      {profile.company_name || "Not provided"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Registration / CIN
+                    </p>
+                    <p className="font-medium">
+                      {profile.cin_number || "Not provided"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      GST
+                    </p>
+                    <p className="font-medium">
+                      {profile.gst_number || "Not provided"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                      Industry Sector
+                    </p>
+                    <p className="font-medium">
+                      {profile.industry_type || "Not provided"}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </motion.section>
+
+            {/* Documents */}
+            <motion.section
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm"
+            >
+              <div className="mb-6 flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10">
+                  <FileCheck className="h-5 w-5 text-primary" />
+                </div>
+
+                <div>
+                  <h2 className="font-semibold">
+                    Uploaded Filings Summary
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Documents submitted for verification
+                  </p>
+                </div>
+              </div>
+
+              {documents.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border p-8 text-center">
+                  <FileText className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+
+                  <p className="font-medium">
+                    No documents uploaded
+                  </p>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Please upload your required documents before continuing.
+                  </p>
+
+                  <Link
+                    href="/industry/onboarding/documents"
+                    className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                  >
+                    Upload Documents
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {documents.map((document) => (
+                    <div
+                      key={document.id}
+                      className="flex items-center justify-between gap-4 rounded-xl border border-border/60 p-4"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="font-medium">
+                            {getDocumentLabel(document.document_type)}
+                          </p>
+
+                          <p className="truncate text-sm text-muted-foreground">
+                            {document.file_name}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium ${getStatusStyle(
+                          document.status
+                        )}`}
+                      >
+                        {document.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {!hasAllRequiredDocuments && documents.length > 0 && (
+                <div className="mt-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-700">
+                  Some required documents are missing or rejected. Please go
+                  back to the Documents step and complete the required uploads.
+                </div>
+              )}
+            </motion.section>
+
+            {/* Ready for review */}
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+                  <CheckCircle className="h-5 w-5 text-emerald-600" />
+                </div>
+
+                <div>
+                  <h3 className="font-semibold">Ready for Review</h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Once submitted, your application will be sent to the
+                    Authority for verification. You will be able to track the
+                    verification status from your Industry dashboard.
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Final submit */}
+            <form onSubmit={handleFinalSubmit}>
+              <div className="rounded-2xl border border-border/60 bg-card p-6 shadow-sm">
+                <label className="flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => {
+                      setAgreedToTerms(e.target.checked);
+                      if (e.target.checked) {
+                        setError("");
+                      }
+                    }}
+                    className="mt-1 h-4 w-4 rounded border-border"
+                  />
+
+                  <span className="text-sm leading-6 text-muted-foreground">
+                    I confirm that all information and documents submitted in
+                    this application are accurate and belong to the registered
+                    industry entity.
                   </span>
-                </li>
-              ))}
-            </ul>
+                </label>
+
+                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-border/60 pt-6 sm:flex-row sm:items-center sm:justify-between">
+                  <Link
+                    href="/industry/onboarding/documents"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-border px-5 py-3 text-sm font-medium transition-colors hover:bg-muted"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
+                  </Link>
+
+                  <button
+                    type="submit"
+                    disabled={
+                      isSubmitting ||
+                      !agreedToTerms ||
+                      !hasAllRequiredDocuments
+                    }
+                    className="flex items-center justify-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        Submit for Verification
+                        <ArrowRight className="h-4 w-4" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
-
-          {/* Legal Acknowledgement Checkbox */}
-          <form onSubmit={handleFinalSubmit} className="space-y-6">
-            <div className="p-4 rounded-xl border border-ocean-900/10 bg-white/50 dark:border-sand-100/10 dark:bg-[#0a232b]/50 backdrop-blur-md">
-              <label className="flex items-start gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={agreedToTerms}
-                  onChange={(e) => setAgreedToTerms(e.target.checked)}
-                  className="mt-0.5 rounded border-ocean-900/20 text-ocean-900 focus:ring-mangrove-500 dark:border-sand-100/20 dark:bg-[#071a20]"
-                />
-                <span className="text-xs text-ink-soft dark:text-sand-100/70 leading-relaxed">
-                  I certify that the information provided and uploaded documents are legitimate, authentic, and compliant with local environmental regulatory standards.
-                </span>
-              </label>
-              {error && <p className="mt-2 text-xs font-medium text-red-500">{error}</p>}
-            </div>
-
-            {/* Actions Bar */}
-            <div className="rounded-2xl border border-ocean-900/10 bg-white/90 p-6 dark:border-sand-100/10 dark:bg-[#0a232b]/90 backdrop-blur-xl flex flex-col-reverse sm:flex-row items-center justify-between gap-4">
-              <Link
-                href="/industry/onboarding/documents"
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-ocean-900/15 text-xs font-medium text-ink hover:bg-sand-50 dark:border-sand-100/15 dark:text-sand-50 dark:hover:bg-[#071a20] transition-colors"
-              >
-                <ArrowLeft size={16} />
-                <span>Back to Files</span>
-              </Link>
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-2.5 rounded-xl bg-ocean-900 text-sand-50 hover:bg-ocean-800 dark:bg-mangrove-500 dark:text-ink dark:hover:bg-mangrove-400 text-sm font-semibold transition-all shadow-md disabled:opacity-50"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 size={16} className="animate-spin" />
-                    <span>Submitting Application...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Submit Compliance Dossier</span>
-                    <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
+        )}
       </main>
     </div>
   );

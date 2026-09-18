@@ -1,446 +1,1261 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
-  FileText,
-  UploadCloud,
-  CheckCircle2,
-  AlertCircle,
   ArrowLeft,
-  ArrowRight,
-  Save,
-  Trash2,
-  FileCheck,
-  Building,
-  ShieldCheck,
-  Paperclip,
+  CheckCircle2,
+  FileText,
   Loader2,
+  Upload,
+  X,
+  AlertCircle,
 } from "lucide-react";
 
-import { ThemeToggle } from "@/components/theme-toggle";
+import { Navbar } from "@/components/navbar";
+import { Footer } from "@/components/footer";
+import { getSupabaseClient } from "@/lib/supabase";
+
+// ======================================================
+// TYPES
+// ======================================================
+
+type DocumentStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED";
+
+interface SavedDocument {
+  id: string;
+  document_type: string;
+  file_name: string;
+  storage_path: string;
+  status: DocumentStatus;
+  rejection_reason: string | null;
+  uploaded_at: string;
+}
 
 interface DocumentField {
-  id: string;
-  label: string;
+  key: string;
+  title: string;
   description: string;
   required: boolean;
   accept: string;
   multiple?: boolean;
 }
 
+// ======================================================
+// DOCUMENT CONFIGURATION
+// ======================================================
+
 const DOCUMENT_FIELDS: DocumentField[] = [
   {
-    id: "companyRegistration",
-    label: "Company Registration Certificate",
-    description: "Certificate of Incorporation or Registration document.",
+    key: "companyRegistration",
+    title: "Company Registration Certificate",
+    description:
+      "Certificate of incorporation or company registration document.",
     required: true,
     accept: ".pdf",
   },
   {
-    id: "gstCertificate",
-    label: "GST Certificate",
-    description: "Valid GST Registration Certificate (Form GST REG-06).",
+    key: "gstCertificate",
+    title: "GST Certificate",
+    description:
+      "Valid GST registration certificate of the company.",
     required: true,
     accept: ".pdf",
   },
   {
-    id: "pcbCertificate",
-    label: "Pollution Control Board (PCB) Certificate",
-    description: "Consent to Operate / Establish from State PCB.",
+    key: "pcbCertificate",
+    title: "Pollution Control Board Certificate",
+    description:
+      "Valid pollution control board consent or certificate.",
     required: true,
     accept: ".pdf,.jpg,.jpeg,.png",
   },
   {
-    id: "environmentalClearance",
-    label: "Environmental Clearance",
-    description: "MoEFCC or SEIAA clearance letter (if applicable).",
+    key: "environmentalClearance",
+    title: "Environmental Clearance",
+    description:
+      "Environmental clearance or related regulatory approval.",
     required: false,
     accept: ".pdf",
   },
   {
-    id: "carbonAuditReport",
-    label: "Annual Carbon Audit Report",
-    description: "Third-party verified carbon emission audit.",
+    key: "carbonAuditReport",
+    title: "Carbon Audit Report",
+    description:
+      "Latest available carbon or emissions audit report.",
     required: true,
     accept: ".pdf",
   },
   {
-    id: "esgReport",
-    label: "ESG / Sustainability Report",
-    description: "Latest annual ESG or sustainability disclosure.",
+    key: "esgReport",
+    title: "ESG Report",
+    description:
+      "Company ESG or sustainability report, if available.",
     required: false,
     accept: ".pdf",
   },
   {
-    id: "authorizationLetter",
-    label: "Authorization Letter",
-    description: "Board resolution or legal authorization for representative.",
+    key: "authorizationLetter",
+    title: "Authorization Letter",
+    description:
+      "Authorized representative or company authorization letter.",
     required: true,
     accept: ".pdf",
   },
   {
-    id: "additionalDocs",
-    label: "Any Additional Documents",
-    description: "Supporting telemetry diagrams, ISO certifications, etc.",
+    key: "additionalDocs",
+    title: "Additional Documents",
+    description:
+      "Any other supporting documents relevant to your application.",
     required: false,
     accept: ".pdf,.jpg,.jpeg,.png,.zip",
     multiple: true,
   },
 ];
 
-export default function DocumentUploadPage() {
+// ======================================================
+// MAIN COMPONENT
+// ======================================================
+
+export default function IndustryDocumentsPage() {
   const router = useRouter();
-  
-  // State for single-file uploads
-  const [files, setFiles] = useState<{ [key: string]: File | null }>({});
-  // State for multi-file upload
-  const [additionalFiles, setAdditionalFiles] = useState<File[]>([]);
-  // UI States
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDraftSaved, setIsDraftSaved] = useState(false);
 
-  // File Change Handler
-  const handleFileChange = (fieldId: string, selectedFiles: FileList | null) => {
-    if (!selectedFiles || selectedFiles.length === 0) return;
+  const [selectedFiles, setSelectedFiles] = useState<
+    Record<string, File[]>
+  >({});
 
-    if (fieldId === "additionalDocs") {
-      const newFiles = Array.from(selectedFiles);
-      setAdditionalFiles((prev) => [...prev, ...newFiles]);
-    } else {
-      const file = selectedFiles[0];
-      // Size check (Max 15MB)
-      if (file.size > 15 * 1024 * 1024) {
-        setErrors((prev) => ({ ...prev, [fieldId]: "File size must be under 15MB" }));
-        return;
-      }
-      setFiles((prev) => ({ ...prev, [fieldId]: file }));
-      setErrors((prev) => {
-        const newErr = { ...prev };
-        delete newErr[fieldId];
-        return newErr;
-      });
-    }
-  };
+  const [savedDocuments, setSavedDocuments] = useState<
+    SavedDocument[]
+  >([]);
 
-  const removeFile = (fieldId: string) => {
-    setFiles((prev) => ({ ...prev, [fieldId]: null }));
-  };
+  const [loading, setLoading] = useState(true);
 
-  const removeAdditionalFile = (index: number) => {
-    setAdditionalFiles((prev) => prev.filter((_, i) => i !== index));
-  };
+  const [uploading, setUploading] = useState(false);
 
-  // Calculate completion percentage
-  const requiredFields = DOCUMENT_FIELDS.filter((f) => f.required);
-  const completedRequired = requiredFields.filter((f) => !!files[f.id]).length;
-  const progressPercentage = Math.round((completedRequired / requiredFields.length) * 100);
+  const [error, setError] = useState("");
 
-  // Form Submission
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newErrors: { [key: string]: string } = {};
+  const [successMessage, setSuccessMessage] =
+    useState("");
 
-    // Validate required fields
-    requiredFields.forEach((field) => {
-      if (!files[field.id]) {
-        newErrors[field.id] = `${field.label} is required`;
-      }
-    });
+  const [userId, setUserId] = useState("");
 
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+  // ======================================================
+  // LOAD USER + SAVED DOCUMENTS
+  // ======================================================
+
+  useEffect(() => {
+    loadDocuments();
+  }, []);
+
+  const loadDocuments = async () => {
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      setError(
+        "Supabase client could not be initialized."
+      );
+      setLoading(false);
       return;
     }
 
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      // Navigate to next step
-      router.push("/industry/onboarding/review");
-    }, 1500);
+    try {
+      setLoading(true);
+      setError("");
+
+      // ------------------------------------------
+      // CURRENT USER
+      // ------------------------------------------
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      setUserId(user.id);
+
+      // ------------------------------------------
+      // PROFILE
+      // ------------------------------------------
+
+      const { data: profile, error: profileError } =
+        await supabase
+          .from("industry_profiles")
+          .select(
+            `
+              id,
+              onboarding_status,
+              rejection_reason
+            `
+          )
+          .eq("user_id", user.id)
+          .single();
+
+      if (profileError) {
+        console.error(profileError);
+
+        setError(
+          "Please complete your Industry profile before uploading documents."
+        );
+
+        return;
+      }
+
+      // ------------------------------------------
+      // DOCUMENTS
+      // ------------------------------------------
+
+      const { data: documents, error: documentsError } =
+        await supabase
+          .from("industry_documents")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("uploaded_at", {
+            ascending: false,
+          });
+
+      if (documentsError) {
+        console.error(documentsError);
+
+        setError(
+          "Unable to load your previously uploaded documents."
+        );
+
+        return;
+      }
+
+      setSavedDocuments(
+        (documents || []) as SavedDocument[]
+      );
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        "Something went wrong while loading your documents."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSaveDraft = () => {
-    setIsDraftSaved(true);
-    setTimeout(() => setIsDraftSaved(false), 3000);
+  // ======================================================
+  // GET LATEST DOCUMENT FOR EACH TYPE
+  // ======================================================
+  //
+  // Important:
+  // If an old document was REJECTED and the user uploads
+  // a corrected version, both rows remain in the database.
+  //
+  // We always use the newest uploaded document for the UI.
+  // This preserves the old record for audit/history.
+  //
+  // ======================================================
+
+  const latestDocuments = useMemo(() => {
+    const map: Record<string, SavedDocument> = {};
+
+    for (const document of savedDocuments) {
+      if (!map[document.document_type]) {
+        map[document.document_type] = document;
+      }
+    }
+
+    return map;
+  }, [savedDocuments]);
+
+  // ======================================================
+  // FILE SELECTION
+  // ======================================================
+
+  const handleFileChange = (
+    documentType: string,
+    files: FileList | null,
+    multiple = false
+  ) => {
+    if (!files) return;
+
+    const fileArray = Array.from(files);
+
+    if (fileArray.length === 0) return;
+
+    setSelectedFiles((previous) => ({
+      ...previous,
+      [documentType]: multiple
+        ? fileArray
+        : [fileArray[0]],
+    }));
+
+    setError("");
+    setSuccessMessage("");
   };
+
+  // ======================================================
+  // REMOVE SELECTED FILE
+  // ======================================================
+
+  const removeSelectedFile = (
+    documentType: string,
+    index: number
+  ) => {
+    setSelectedFiles((previous) => {
+      const current = previous[documentType] || [];
+
+      const updated = current.filter(
+        (_, fileIndex) => fileIndex !== index
+      );
+
+      const next = {
+        ...previous,
+        [documentType]: updated,
+      };
+
+      if (updated.length === 0) {
+        delete next[documentType];
+      }
+
+      return next;
+    });
+  };
+
+  // ======================================================
+  // VALIDATE REQUIRED DOCUMENTS
+  // ======================================================
+
+  const validateRequiredDocuments = () => {
+    for (const field of DOCUMENT_FIELDS) {
+      if (!field.required) continue;
+
+      const selected =
+        selectedFiles[field.key] || [];
+
+      const latest = latestDocuments[field.key];
+
+      // A required document is valid when:
+      //
+      // 1. User selected a new replacement file
+      // OR
+      // 2. Existing latest document is not rejected
+      //
+      if (
+        selected.length === 0 &&
+        (!latest || latest.status === "REJECTED")
+      ) {
+        return {
+          valid: false,
+          message: `Please upload ${field.title}.`,
+        };
+      }
+    }
+
+    return {
+      valid: true,
+      message: "",
+    };
+  };
+
+  // ======================================================
+  // UPLOAD ONE DOCUMENT
+  // ======================================================
+
+  const uploadDocument = async (
+    documentType: string,
+    file: File
+  ) => {
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      throw new Error(
+        "Supabase client could not be initialized."
+      );
+    }
+
+    if (!userId) {
+      throw new Error("User session not found.");
+    }
+
+    // ------------------------------------------
+    // SAFE FILE NAME
+    // ------------------------------------------
+
+    const safeFileName = file.name
+      .replace(/[^a-zA-Z0-9._-]/g, "_");
+
+    const timestamp = Date.now();
+
+    const storagePath =
+      `${userId}/${documentType}/${timestamp}-${safeFileName}`;
+
+    // ------------------------------------------
+    // UPLOAD TO STORAGE
+    // ------------------------------------------
+
+    const { error: uploadError } =
+      await supabase.storage
+        .from("industry-documents")
+        .upload(storagePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+    if (uploadError) {
+      console.error(uploadError);
+
+      throw new Error(
+        `Failed to upload ${file.name}: ${uploadError.message}`
+      );
+    }
+
+    // ------------------------------------------
+    // INSERT NEW DATABASE RECORD
+    // ------------------------------------------
+    //
+    // IMPORTANT:
+    // We DO NOT update/delete the old rejected row.
+    //
+    // A new row is inserted with PENDING status.
+    //
+    // This gives us an audit history:
+    //
+    // Old document -> REJECTED
+    // New document -> PENDING
+    //
+    // ------------------------------------------
+
+    const { error: insertError } =
+      await supabase
+        .from("industry_documents")
+        .insert({
+          user_id: userId,
+          document_type: documentType,
+          file_name: file.name,
+          storage_path: storagePath,
+          status: "PENDING",
+          rejection_reason: null,
+        });
+
+    if (insertError) {
+      console.error(insertError);
+
+      // ------------------------------------------
+      // CLEAN UP STORAGE IF DB INSERT FAILS
+      // ------------------------------------------
+
+      await supabase.storage
+        .from("industry-documents")
+        .remove([storagePath]);
+
+      throw new Error(
+        `Failed to save ${file.name}: ${insertError.message}`
+      );
+    }
+
+    return {
+      documentType,
+      fileName: file.name,
+      storagePath,
+    };
+  };
+
+  // ======================================================
+  // UPLOAD ALL SELECTED FILES
+  // ======================================================
+
+  const uploadSelectedDocuments = async () => {
+    const selectedEntries = Object.entries(
+      selectedFiles
+    );
+
+    if (selectedEntries.length === 0) {
+      return;
+    }
+
+    for (const [
+      documentType,
+      files,
+    ] of selectedEntries) {
+      for (const file of files) {
+        await uploadDocument(
+          documentType,
+          file
+        );
+      }
+    }
+  };
+
+  // ======================================================
+  // SAVE PROGRESS
+  // ======================================================
+
+  const handleSaveProgress = async () => {
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      setError(
+        "Supabase client could not be initialized."
+      );
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setError("");
+      setSuccessMessage("");
+
+      if (!userId) {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          router.push("/login");
+          return;
+        }
+
+        setUserId(user.id);
+      }
+
+      // ------------------------------------------
+      // UPLOAD SELECTED FILES
+      // ------------------------------------------
+
+      await uploadSelectedDocuments();
+
+      // ------------------------------------------
+      // UPDATE PROFILE STATUS
+      // ------------------------------------------
+
+      const { error: profileError } =
+        await supabase
+          .from("industry_profiles")
+          .update({
+            onboarding_status: "PENDING_DOCUMENTS",
+          })
+          .eq("user_id", userId);
+
+      if (profileError) {
+        console.error(profileError);
+
+        throw new Error(
+          "Documents uploaded, but profile status could not be updated."
+        );
+      }
+
+      // ------------------------------------------
+      // CLEAR LOCAL FILES
+      // ------------------------------------------
+
+      setSelectedFiles({});
+
+      setSuccessMessage(
+        "Your documents have been saved successfully."
+      );
+
+      await loadDocuments();
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to save your documents."
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ======================================================
+  // FINAL SUBMIT
+  // ======================================================
+
+  const handleFinalSubmit = async () => {
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      setError(
+        "Supabase client could not be initialized."
+      );
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setError("");
+      setSuccessMessage("");
+
+      // ------------------------------------------
+      // VALIDATE
+      // ------------------------------------------
+
+      const validation =
+        validateRequiredDocuments();
+
+      if (!validation.valid) {
+        setError(validation.message);
+        setUploading(false);
+        return;
+      }
+
+      // ------------------------------------------
+      // UPLOAD NEW / REPLACEMENT FILES
+      // ------------------------------------------
+
+      await uploadSelectedDocuments();
+
+      // ------------------------------------------
+      // IMPORTANT
+      // ------------------------------------------
+      //
+      // Reload documents AFTER upload so that a
+      // replacement document is now considered
+      // the latest document.
+      //
+      // ------------------------------------------
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      // ------------------------------------------
+      // FETCH LATEST DOCUMENTS DIRECTLY
+      // ------------------------------------------
+
+      const { data: freshDocuments, error: freshError } =
+        await supabase
+          .from("industry_documents")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("uploaded_at", {
+            ascending: false,
+          });
+
+      if (freshError) {
+        console.error(freshError);
+
+        throw new Error(
+          "Unable to verify the latest uploaded documents."
+        );
+      }
+
+      const latestMap: Record<
+        string,
+        SavedDocument
+      > = {};
+
+      for (const document of (
+        freshDocuments || []
+      ) as SavedDocument[]) {
+        if (!latestMap[document.document_type]) {
+          latestMap[document.document_type] =
+            document;
+        }
+      }
+
+      // ------------------------------------------
+      // CHECK REQUIRED DOCUMENTS AGAIN
+      // ------------------------------------------
+
+      for (const requiredType of REQUIRED_DOCUMENTS) {
+        const document =
+          latestMap[requiredType];
+
+        if (
+          !document ||
+          document.status === "REJECTED"
+        ) {
+          const label =
+            DOCUMENT_FIELDS.find(
+              (field) =>
+                field.key === requiredType
+            )?.title || requiredType;
+
+          throw new Error(
+            `Please provide a valid ${label}.`
+          );
+        }
+      }
+
+      // ------------------------------------------
+      // UPDATE PROFILE
+      // ------------------------------------------
+
+      const { error: updateError } =
+        await supabase
+          .from("industry_profiles")
+          .update({
+            onboarding_status:
+              "PENDING_VERIFICATION",
+
+            // Clear the previous profile-level
+            // rejection reason when resubmitting.
+            rejection_reason: null,
+          })
+          .eq("user_id", user.id);
+
+      if (updateError) {
+        console.error(updateError);
+
+        throw new Error(
+          "Documents are saved, but the application could not be submitted for verification."
+        );
+      }
+
+      // ------------------------------------------
+      // CLEAR LOCAL STATE
+      // ------------------------------------------
+
+      setSelectedFiles({});
+
+      // ------------------------------------------
+      // REDIRECT TO REVIEW
+      // ------------------------------------------
+
+      router.push(
+        "/industry/onboarding/review"
+      );
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to submit your documents."
+      );
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ======================================================
+  // REQUIRED DOCUMENTS
+  // ======================================================
+
+  const REQUIRED_DOCUMENTS = [
+    "companyRegistration",
+    "gstCertificate",
+    "pcbCertificate",
+    "carbonAuditReport",
+    "authorizationLetter",
+  ];
+
+  // ======================================================
+  // LOADING
+  // ======================================================
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100">
+        <Navbar />
+
+        <main className="container mx-auto px-4 pt-32 pb-20 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2
+              size={34}
+              className="animate-spin text-mangrove-600"
+            />
+
+            <p className="text-sm text-ink-soft dark:text-sand-100/60">
+              Loading your documents...
+            </p>
+          </div>
+        </main>
+
+        <Footer />
+      </div>
+    );
+  }
+
+  // ======================================================
+  // MAIN UI
+  // ======================================================
 
   return (
-    <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
-      {/* Background Ambient Glow */}
-      <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[900px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl opacity-70 dark:from-ocean-900/25 dark:via-mangrove-900/15" />
+    <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col">
+      <Navbar />
 
-      {/* Header */}
-      <header className="relative z-10 border-b border-ocean-900/5 dark:border-sand-100/5 bg-white/40 dark:bg-[#061418]/40 backdrop-blur-md">
-        <div className="container-page section-pad flex h-20 items-center justify-between">
-          <Link
-            href="/industry/onboarding/profile"
-            className="inline-flex items-center gap-2 text-sm font-medium text-ink/70 hover:text-ink dark:text-sand-100/70 dark:hover:text-sand-50 transition-colors"
+      <main className="relative flex-1 container mx-auto px-4 sm:px-6 lg:px-8 pt-28 sm:pt-36 pb-16 max-w-6xl">
+        {/* Background */}
+        <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[1000px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl" />
+
+        <div className="relative z-10 space-y-8">
+          {/* ==================================================
+              HEADER
+          ================================================== */}
+
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
           >
-            <ArrowLeft size={16} />
-            <span>Back to Profile</span>
-          </Link>
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  "/industry/onboarding"
+                )
+              }
+              className="inline-flex items-center gap-2 text-xs font-mono text-ink-soft dark:text-sand-100/60 hover:text-ink dark:hover:text-sand-50 transition-colors mb-5"
+            >
+              <ArrowLeft size={14} />
+              Back to Onboarding
+            </button>
 
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-ocean-900/10 dark:bg-sand-100/10">
+                <FileText
+                  size={25}
+                  className="text-ocean-900 dark:text-sand-50"
+                />
+              </div>
 
-      {/* Main Container */}
-      <main className="relative z-10 flex-1 container-page section-pad py-10 max-w-5xl mx-auto">
-        {/* Step Bar */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 rounded-2xl border border-ocean-900/10 bg-white/80 p-4 shadow-sm dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-4"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink font-semibold text-sm shadow-sm">
-              03
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-display font-semibold tracking-tight">
+                  Compliance Documents
+                </h1>
+
+                <p className="mt-1 text-sm text-ink-soft dark:text-sand-100/60">
+                  Upload the documents required to verify your
+                  Industry account.
+                </p>
+              </div>
             </div>
-            <div>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-mangrove-700 dark:text-mangrove-300 font-semibold block">
-                Onboarding Step 3 of 4
-              </span>
-              <h2 className="text-base font-semibold text-ink dark:text-sand-50">
-                Compliance & Regulatory Filings
-              </h2>
-            </div>
-          </div>
+          </motion.div>
 
-          {/* Progress Pill */}
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <span className="text-xs font-mono font-medium text-ink/70 dark:text-sand-100/70">
-                Required Uploads: {completedRequired}/{requiredFields.length}
-              </span>
-            </div>
-            <div className="w-24 h-2 bg-sand-200 dark:bg-[#071a20] rounded-full overflow-hidden border border-ocean-900/10 dark:border-sand-100/10">
-              <div
-                className="h-full bg-mangrove-500 transition-all duration-300"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
-          </div>
-        </motion.div>
+          {/* ==================================================
+              REJECTION NOTICE
+          ================================================== */}
 
-        {/* Page Titles */}
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <span className="font-mono text-xs uppercase tracking-widest text-mangrove-700 dark:text-mangrove-300 font-medium">
-            Verification Vault
-          </span>
-          <h1 className="mt-2 font-display text-3xl sm:text-4xl font-medium tracking-tight text-ink dark:text-sand-50">
-            Upload Compliance Filings
-          </h1>
-          <p className="mt-2 text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
-            Submit required environmental permits, carbon audit certifications, and official corporate filings for automated regulatory verification.
-          </p>
-        </div>
-
-        {/* Draft Notification Toast */}
-        <AnimatePresence>
-          {isDraftSaved && (
+          {savedDocuments.some(
+            (document) =>
+              document.status === "REJECTED"
+          ) && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              className="mb-6 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-sm flex items-center gap-3 shadow-sm"
+              className="rounded-[24px] border border-red-500/20 bg-red-500/5 p-5 sm:p-6"
             >
-              <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />
-              <span>Draft files saved successfully. You can return to complete this step later.</span>
+              <div className="flex items-start gap-3">
+                <AlertCircle
+                  size={20}
+                  className="shrink-0 text-red-600 dark:text-red-400"
+                />
+
+                <div>
+                  <h2 className="text-sm font-semibold text-red-800 dark:text-red-300">
+                    Some documents were rejected
+                  </h2>
+
+                  <p className="text-xs text-red-700/70 dark:text-red-300/60 mt-1">
+                    Please review the rejection reasons below and
+                    upload corrected documents. Your previous
+                    rejected documents are kept as part of the
+                    verification history.
+                  </p>
+                </div>
+              </div>
             </motion.div>
           )}
-        </AnimatePresence>
 
-        {/* Form Container */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {DOCUMENT_FIELDS.map((field) => {
-              const isMulti = field.multiple;
-              const hasFile = isMulti ? additionalFiles.length > 0 : !!files[field.id];
-              const fieldError = errors[field.id];
+          {/* ==================================================
+              SUCCESS MESSAGE
+          ================================================== */}
 
-              return (
-                <motion.div
-                  key={field.id}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`relative rounded-2xl border p-5 transition-all bg-white/90 dark:bg-[#0a232b]/90 backdrop-blur-xl flex flex-col justify-between ${
-                    fieldError
-                      ? "border-red-400 dark:border-red-500/50"
-                      : hasFile
-                      ? "border-emerald-500/50 dark:border-emerald-500/30 bg-emerald-50/10 dark:bg-emerald-950/10"
-                      : "border-ocean-900/10 dark:border-sand-100/10 hover:border-ocean-900/20 dark:hover:border-sand-100/20"
-                  }`}
-                >
-                  <div>
-                    {/* Card Header */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <FileCheck
-                          size={18}
-                          className={
-                            hasFile
-                              ? "text-emerald-600 dark:text-emerald-400"
-                              : "text-ink-faint dark:text-sand-100/40"
-                          }
-                        />
-                        <h3 className="font-medium text-sm text-ink dark:text-sand-50">
-                          {field.label}
-                        </h3>
+          {successMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 flex items-center gap-3 text-sm text-emerald-700 dark:text-emerald-300"
+            >
+              <CheckCircle2 size={18} />
+              <span>{successMessage}</span>
+            </motion.div>
+          )}
+
+          {/* ==================================================
+              ERROR MESSAGE
+          ================================================== */}
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 flex items-start gap-3 text-sm text-red-700 dark:text-red-300"
+            >
+              <AlertCircle
+                size={18}
+                className="shrink-0 mt-0.5"
+              />
+
+              <span>{error}</span>
+            </motion.div>
+          )}
+
+          {/* ==================================================
+              DOCUMENT LIST
+          ================================================== */}
+
+          <div className="space-y-5">
+            {DOCUMENT_FIELDS.map(
+              (field, index) => {
+                const latest =
+                  latestDocuments[field.key];
+
+                const selected =
+                  selectedFiles[field.key] || [];
+
+                const isRejected =
+                  latest?.status === "REJECTED";
+
+                const isApproved =
+                  latest?.status === "APPROVED";
+
+                const isPending =
+                  latest?.status === "PENDING";
+
+                return (
+                  <motion.section
+                    key={field.key}
+                    initial={{
+                      opacity: 0,
+                      y: 12,
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                    }}
+                    transition={{
+                      delay: index * 0.03,
+                    }}
+                    className={`rounded-[24px] border bg-white/80 dark:bg-[#0a232b]/80 backdrop-blur-md p-5 sm:p-6 shadow-soft ${
+                      isRejected
+                        ? "border-red-500/20"
+                        : "border-ocean-900/10 dark:border-sand-100/10"
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ocean-900/10 dark:bg-sand-100/10">
+                          <FileText
+                            size={18}
+                            className="text-ocean-900 dark:text-sand-50"
+                          />
+                        </div>
+
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-sm font-semibold">
+                              {field.title}
+                            </h2>
+
+                            {field.required && (
+                              <span className="text-[9px] font-mono uppercase tracking-wider text-red-500">
+                                Required
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="mt-1 text-xs leading-5 text-ink-soft dark:text-sand-100/55 max-w-2xl">
+                            {field.description}
+                          </p>
+                        </div>
                       </div>
-                      <span
-                        className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded-full border ${
-                          field.required
-                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20"
-                            : "bg-sand-200/50 dark:bg-[#071a20] text-ink-soft dark:text-sand-100/50 border-transparent"
-                        }`}
-                      >
-                        {field.required ? "Required" : "Optional"}
-                      </span>
+
+                      {/* Existing status */}
+                      {latest && (
+                        <DocumentStatus
+                          status={latest.status}
+                        />
+                      )}
                     </div>
 
-                    <p className="text-xs text-ink-soft dark:text-sand-100/60 mb-4 min-h-[32px]">
-                      {field.description}
-                    </p>
-                  </div>
+                    {/* ==================================================
+                        EXISTING DOCUMENT
+                    ================================================== */}
 
-                  {/* Upload Dropzone / State View */}
-                  <div>
-                    {!isMulti ? (
-                      /* SINGLE FILE DISPLAY OR INPUT */
-                      files[field.id] ? (
-                        <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50 dark:bg-[#071a20] border border-ocean-900/10 dark:border-sand-100/10">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <FileText size={18} className="text-ocean-900 dark:text-mangrove-300 shrink-0" />
-                            <div className="truncate">
-                              <p className="text-xs font-medium text-ink dark:text-sand-50 truncate">
-                                {files[field.id]?.name}
+                    {latest && (
+                      <div className="mt-5 rounded-2xl border border-ocean-900/5 dark:border-sand-100/5 bg-sand-50/60 dark:bg-[#071a20]/50 p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/40">
+                              Latest Uploaded File
+                            </p>
+
+                            <p className="text-xs font-medium mt-1 truncate">
+                              {latest.file_name}
+                            </p>
+
+                            <p className="text-[10px] text-ink-soft dark:text-sand-100/40 mt-1">
+                              Uploaded{" "}
+                              {new Date(
+                                latest.uploaded_at
+                              ).toLocaleString()}
+                            </p>
+                          </div>
+
+                          {isApproved && (
+                            <CheckCircle2
+                              size={18}
+                              className="shrink-0 text-emerald-500"
+                            />
+                          )}
+                        </div>
+
+                        {/* Rejection reason */}
+                        {isRejected &&
+                          latest.rejection_reason && (
+                            <div className="mt-3 rounded-xl border border-red-500/15 bg-red-500/10 p-3">
+                              <p className="text-[10px] font-mono uppercase tracking-wider font-semibold text-red-700 dark:text-red-300">
+                                Authority Feedback
                               </p>
-                              <p className="text-[10px] text-ink-faint dark:text-sand-100/40 font-mono">
-                                {((files[field.id]?.size || 0) / (1024 * 1024)).toFixed(2)} MB
+
+                              <p className="mt-1 text-xs leading-5 text-red-700/80 dark:text-red-300/80">
+                                {
+                                  latest.rejection_reason
+                                }
                               </p>
                             </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeFile(field.id)}
-                            className="p-1.5 rounded-lg text-ink-soft hover:text-red-500 dark:text-sand-100/60 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="group flex flex-col items-center justify-center p-4 border-2 border-dashed border-ocean-900/15 dark:border-sand-100/15 hover:border-mangrove-500 dark:hover:border-mangrove-400 rounded-xl cursor-pointer bg-sand-50/40 dark:bg-[#071a20]/40 transition-colors">
-                          <UploadCloud
-                            size={22}
-                            className="text-ink-faint group-hover:text-mangrove-600 dark:text-sand-100/40 dark:group-hover:text-mangrove-300 transition-colors mb-1"
-                          />
-                          <span className="text-xs font-medium text-ink/80 dark:text-sand-100/80">
-                            Choose File <span className="text-ink-faint dark:text-sand-100/40 font-normal">or drop here</span>
-                          </span>
-                          <span className="text-[10px] font-mono text-ink-faint dark:text-sand-100/40 uppercase mt-1">
-                            {field.accept.replace(/\./g, "").toUpperCase()} (Max 15MB)
-                          </span>
-                          <input
-                            type="file"
-                            accept={field.accept}
-                            className="hidden"
-                            onChange={(e) => handleFileChange(field.id, e.target.files)}
-                          />
-                        </label>
-                      )
-                    ) : (
-                      /* MULTI-FILE DISPLAY OR INPUT */
-                      <div className="space-y-3">
-                        {additionalFiles.length > 0 && (
-                          <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                            {additionalFiles.map((file, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between p-2.5 rounded-xl bg-sand-50 dark:bg-[#071a20] border border-ocean-900/10 dark:border-sand-100/10"
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <Paperclip size={14} className="text-ocean-900 dark:text-mangrove-300 shrink-0" />
-                                  <span className="text-xs text-ink dark:text-sand-50 truncate">
-                                    {file.name}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeAdditionalFile(idx)}
-                                  className="text-ink-soft hover:text-red-500 dark:text-sand-100/60 dark:hover:text-red-400 p-1"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            ))}
+                          )}
+
+                        {/* Replacement notice */}
+                        {isRejected && (
+                          <div className="mt-3 flex items-center gap-2 text-[11px] text-red-700/70 dark:text-red-300/60">
+                            <AlertCircle size={13} />
+
+                            <span>
+                              Upload a corrected version below
+                              to replace this rejected document.
+                            </span>
                           </div>
                         )}
 
-                        <label className="group flex flex-col items-center justify-center p-3 border-2 border-dashed border-ocean-900/15 dark:border-sand-100/15 hover:border-mangrove-500 dark:hover:border-mangrove-400 rounded-xl cursor-pointer bg-sand-50/40 dark:bg-[#071a20]/40 transition-colors">
-                          <span className="text-xs font-medium text-ink/80 dark:text-sand-100/80">
-                            + Add Additional Document
-                          </span>
-                          <input
-                            type="file"
-                            multiple
-                            accept={field.accept}
-                            className="hidden"
-                            onChange={(e) => handleFileChange(field.id, e.target.files)}
-                          />
-                        </label>
+                        {/* Pending notice */}
+                        {isPending && (
+                          <div className="mt-3 flex items-center gap-2 text-[11px] text-amber-700/70 dark:text-amber-300/60">
+                            <Loader2
+                              size={13}
+                              className="animate-spin"
+                            />
+
+                            <span>
+                              This document is waiting for Authority
+                              review.
+                            </span>
+                          </div>
+                        )}
                       </div>
                     )}
 
-                    {fieldError && (
-                      <p className="mt-2 text-xs text-red-500 dark:text-red-400 font-medium flex items-center gap-1">
-                        <AlertCircle size={14} />
-                        {fieldError}
-                      </p>
+                    {/* ==================================================
+                        SELECTED NEW FILES
+                    ================================================== */}
+
+                    {selected.length > 0 && (
+                      <div className="mt-5 space-y-2">
+                        <p className="text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/40">
+                          New File{selected.length > 1 ? "s" : ""}
+                        </p>
+
+                        {selected.map(
+                          (file, fileIndex) => (
+                            <div
+                              key={`${file.name}-${fileIndex}`}
+                              className="flex items-center justify-between gap-3 rounded-xl border border-mangrove-500/20 bg-mangrove-500/5 px-3 py-2.5"
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Upload
+                                  size={14}
+                                  className="shrink-0 text-mangrove-600"
+                                />
+
+                                <span className="text-xs truncate">
+                                  {file.name}
+                                </span>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  removeSelectedFile(
+                                    field.key,
+                                    fileIndex
+                                  )
+                                }
+                                className="shrink-0 p-1 rounded-lg hover:bg-red-500/10 text-ink-soft hover:text-red-500 transition-colors"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          )
+                        )}
+                      </div>
                     )}
-                  </div>
-                </motion.div>
-              );
-            })}
+
+                    {/* ==================================================
+                        UPLOAD BUTTON
+                    ================================================== */}
+
+                    <div className="mt-5">
+                      <label className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-ocean-900/15 dark:border-sand-100/15 bg-sand-50/50 dark:bg-[#071a20]/40 px-5 py-7 cursor-pointer hover:bg-sand-100 dark:hover:bg-[#102d35] transition-colors">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ocean-900/10 dark:bg-sand-100/10">
+                          <Upload
+                            size={18}
+                            className="text-ocean-900 dark:text-sand-50"
+                          />
+                        </div>
+
+                        <span className="text-xs font-semibold">
+                          {isRejected
+                            ? "Upload Corrected Document"
+                            : "Choose File"}
+                        </span>
+
+                        <span className="text-[10px] text-ink-soft dark:text-sand-100/45">
+                          Accepted:{" "}
+                          {field.accept
+                            .replaceAll(
+                              ".",
+                              ""
+                            )
+                            .toUpperCase()
+                            .split(",")
+                            .join(", ")}
+                        </span>
+
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept={field.accept}
+                          multiple={field.multiple}
+                          onChange={(event) =>
+                            handleFileChange(
+                              field.key,
+                              event.target.files,
+                              field.multiple
+                            )
+                          }
+                        />
+                      </label>
+                    </div>
+                  </motion.section>
+                );
+              }
+            )}
           </div>
 
-          {/* Action Bar */}
-          <div className="rounded-2xl border border-ocean-900/10 bg-white/90 p-6 dark:border-sand-100/10 dark:bg-[#0a232b]/90 backdrop-blur-xl flex flex-col-reverse sm:flex-row items-center justify-between gap-4 mt-8 shadow-soft">
-            <button
-              type="button"
-              onClick={handleSaveDraft}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl border border-ocean-900/15 text-xs font-medium text-ink hover:bg-sand-50 dark:border-sand-100/15 dark:text-sand-50 dark:hover:bg-[#071a20] transition-colors"
-            >
-              <Save size={16} />
-              <span>Save Progress</span>
-            </button>
+          {/* ==================================================
+              ACTIONS
+          ================================================== */}
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-2.5 rounded-xl bg-ocean-900 text-sand-50 hover:bg-ocean-800 dark:bg-mangrove-500 dark:text-ink dark:hover:bg-mangrove-400 text-sm font-semibold transition-all shadow-md disabled:opacity-50"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Validating Files...</span>
-                </>
-              ) : (
-                <>
-                  <span>Save & Continue to Review</span>
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </button>
-          </div>
-        </form>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-[24px] border border-ocean-900/10 dark:border-sand-100/10 bg-white/80 dark:bg-[#0a232b]/80 backdrop-blur-md p-5 sm:p-6"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+              <div>
+                <p className="text-sm font-semibold">
+                  Ready to continue?
+                </p>
+
+                <p className="text-xs text-ink-soft dark:text-sand-100/55 mt-1">
+                  Save your progress or submit all required
+                  documents for Authority verification.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={handleSaveProgress}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-ocean-900/10 dark:border-sand-100/10 bg-white dark:bg-[#071a20] px-5 py-3 text-xs font-semibold hover:bg-sand-100 dark:hover:bg-[#102d35] transition-colors disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <Loader2
+                      size={15}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <FileText size={15} />
+                  )}
+
+                  Save Progress
+                </button>
+
+                <button
+                  type="button"
+                  disabled={uploading}
+                  onClick={handleFinalSubmit}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-ocean-900 px-5 py-3 text-xs font-semibold text-sand-50 hover:bg-ocean-800 transition-colors disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <Loader2
+                      size={15}
+                      className="animate-spin"
+                    />
+                  ) : (
+                    <CheckCircle2 size={15} />
+                  )}
+
+                  Submit for Verification
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
       </main>
+
+      <Footer />
     </div>
+  );
+}
+
+// ======================================================
+// DOCUMENT STATUS COMPONENT
+// ======================================================
+
+function DocumentStatus({
+  status,
+}: {
+  status: DocumentStatus;
+}) {
+  if (status === "APPROVED") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-mono text-emerald-700 dark:text-emerald-300 shrink-0">
+        <CheckCircle2 size={11} />
+        APPROVED
+      </span>
+    );
+  }
+
+  if (status === "REJECTED") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-mono text-red-700 dark:text-red-300 shrink-0">
+        <X size={11} />
+        REJECTED
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-mono text-amber-700 dark:text-amber-300 shrink-0">
+      <Loader2
+        size={11}
+        className="animate-spin"
+      />
+      PENDING
+    </span>
   );
 }

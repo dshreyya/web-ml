@@ -1,16 +1,15 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+
 import {
   Leaf,
   Coins,
-  ShieldCheck,
   TrendingUp,
   Clock,
   CheckCircle2,
-  Lock,
   PlusCircle,
   FileText,
   UserPen,
@@ -22,14 +21,15 @@ import {
   MapPin,
   X,
   Radio,
-  ExternalLink,
   Download,
 } from "lucide-react";
 
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
+import { getSupabaseClient } from "@/lib/supabase";
 
 // --- INDUSTRY TYPES & INTERFACES ---
+
 export interface ProjectTelemetry {
   id: string;
   name: string;
@@ -49,6 +49,7 @@ export interface ActivityLog {
 }
 
 // --- ANIMATION VARIANTS ---
+
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -65,9 +66,14 @@ const itemVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.45, ease: [0.16, 1, 0.3, 1] },
+    transition: {
+      duration: 0.45,
+      ease: [0.16, 1, 0.3, 1],
+    },
   },
 };
+
+// --- INDUSTRY DASHBOARD ---
 
 export default function FarmerDashboardPage() {
   const router = useRouter();
@@ -76,7 +82,119 @@ export default function FarmerDashboardPage() {
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isSupportModalOpen, setIsSupportModalOpen] = useState(false);
 
-  // Mock Primary Project
+  // Access Check State
+  const [checkingAccess, setCheckingAccess] = useState(true);
+
+  // --------------------------------------------------
+  // CHECK INDUSTRY ACCOUNT ACCESS
+  // --------------------------------------------------
+
+  useEffect(() => {
+    checkIndustryAccess();
+  }, []);
+
+  const checkIndustryAccess = async () => {
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      router.push("/login");
+      return;
+    }
+
+    try {
+      setCheckingAccess(true);
+
+      // Get logged-in user
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        router.push("/login");
+        return;
+      }
+
+      // Get industry profile
+      const { data: profile, error: profileError } = await supabase
+        .from("industry_profiles")
+        .select("onboarding_status")
+        .eq("user_id", user.id)
+        .single();
+
+      // No profile found
+      if (profileError) {
+        console.error(
+          "Industry profile access check error:",
+          profileError
+        );
+
+        router.push("/industry/onboarding");
+        return;
+      }
+
+      const status = profile?.onboarding_status;
+
+      // --------------------------------------------------
+      // APPROVED
+      // User can access dashboard
+      // --------------------------------------------------
+
+      if (status === "APPROVED") {
+        setCheckingAccess(false);
+        return;
+      }
+
+      // --------------------------------------------------
+      // DRAFT
+      // Send user back to onboarding
+      // --------------------------------------------------
+
+      if (status === "DRAFT") {
+        router.push("/industry/onboarding");
+        return;
+      }
+
+      // --------------------------------------------------
+      // DOCUMENTS REQUIRED
+      // --------------------------------------------------
+
+      if (status === "PENDING_DOCUMENTS") {
+        router.push("/industry/onboarding/documents");
+        return;
+      }
+
+      // --------------------------------------------------
+      // WAITING FOR AUTHORITY VERIFICATION
+      // --------------------------------------------------
+
+      if (status === "PENDING_VERIFICATION") {
+        router.push("/industry/onboarding/verification");
+        return;
+      }
+
+      // --------------------------------------------------
+      // REJECTED
+      // Verification page will show rejection details
+      // --------------------------------------------------
+
+      if (status === "REJECTED") {
+        router.push("/industry/onboarding/verification");
+        return;
+      }
+
+      // Unknown status
+      router.push("/industry/onboarding");
+    } catch (error) {
+      console.error("Industry access check failed:", error);
+      router.push("/industry/onboarding");
+    }
+  };
+
+  // --------------------------------------------------
+  // MOCK PRIMARY PROJECT
+  // --------------------------------------------------
+
   const [primaryProject] = useState<ProjectTelemetry>({
     id: "PRJ-MANGROVE-001",
     name: "Sundarbans Coastal Mangrove Restoration",
@@ -86,6 +204,28 @@ export default function FarmerDashboardPage() {
     status: "VERIFICATION_PENDING",
     mrvSensorStatus: "SYNCED",
   });
+
+  // --------------------------------------------------
+  // LOADING SCREEN WHILE ACCESS IS CHECKED
+  // --------------------------------------------------
+
+  if (checkingAccess) {
+    return (
+      <div className="min-h-screen bg-sand-100 dark:bg-[#061418] flex items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-ocean-900/20 border-t-ocean-900 dark:border-sand-100/20 dark:border-t-sand-100" />
+
+          <p className="text-sm text-ink-soft dark:text-sand-100/60">
+            Verifying your industry account...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --------------------------------------------------
+  // DASHBOARD
+  // --------------------------------------------------
 
   return (
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
@@ -102,10 +242,14 @@ export default function FarmerDashboardPage() {
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          transition={{
+            duration: 0.55,
+            ease: [0.16, 1, 0.3, 1],
+          }}
           className="relative overflow-hidden rounded-[32px] border border-ocean-900/10 bg-gradient-to-br from-white/90 via-sand-50/80 to-mangrove-500/15 dark:border-sand-100/10 dark:from-[#0a232b]/95 dark:via-[#071a20]/90 dark:to-mangrove-950/30 backdrop-blur-xl p-6 sm:p-10 shadow-card"
         >
           <div className="pointer-events-none absolute -right-12 -top-12 h-72 w-72 rounded-full bg-gradient-to-br from-mangrove-400/25 via-ocean-500/20 to-transparent blur-3xl" />
+
           <div className="pointer-events-none absolute -left-12 -bottom-12 h-48 w-48 rounded-full bg-gradient-to-tr from-ocean-500/15 to-transparent blur-2xl" />
 
           <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
@@ -114,6 +258,7 @@ export default function FarmerDashboardPage() {
 
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-medium bg-mangrove-500/15 text-mangrove-800 dark:bg-mangrove-500/20 dark:text-mangrove-300 border border-mangrove-500/20">
                 <Leaf size={14} className="animate-pulse" />
+
                 <span>Blue Carbon Operator Portal</span>
               </div>
 
@@ -122,13 +267,16 @@ export default function FarmerDashboardPage() {
               </h1>
 
               <p className="text-sm sm:text-base text-ink-soft dark:text-sand-100/70 leading-relaxed font-normal">
-                Monitor live dMRV telemetry, track satellite carbon sequestration models, and manage marketplace credit issuances.
+                Monitor live dMRV telemetry, track satellite carbon
+                sequestration models, and manage marketplace credit
+                issuances.
               </p>
 
               {/* Progress Indicator */}
               <div className="pt-2 max-w-md space-y-2">
 
                 <div className="flex items-center justify-between text-xs font-mono text-ink-soft dark:text-sand-100/70">
+
                   <span className="uppercase tracking-wider">
                     Verification Phase
                   </span>
@@ -136,6 +284,7 @@ export default function FarmerDashboardPage() {
                   <span className="font-semibold text-mangrove-700 dark:text-mangrove-300">
                     Stage 3 of 4 (75%)
                   </span>
+
                 </div>
 
                 <div className="h-2 w-full rounded-full bg-sand-200/80 dark:bg-[#071a20] overflow-hidden border border-ocean-900/5 dark:border-sand-100/5">
@@ -143,7 +292,10 @@ export default function FarmerDashboardPage() {
                   <motion.div
                     initial={{ width: 0 }}
                     animate={{ width: "75%" }}
-                    transition={{ duration: 1, ease: "easeOut" }}
+                    transition={{
+                      duration: 1,
+                      ease: "easeOut",
+                    }}
                     className="h-full bg-gradient-to-r from-mangrove-500 to-ocean-500 rounded-full"
                   />
 
@@ -155,8 +307,11 @@ export default function FarmerDashboardPage() {
             <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end gap-4 w-full sm:w-auto shrink-0 pt-2 lg:pt-0">
 
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-mono font-medium bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/20 shadow-sm">
+
                 <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+
                 <span>Regional Review Pending</span>
+
               </div>
 
               {/* MARKETPLACE BUTTON */}
@@ -166,6 +321,7 @@ export default function FarmerDashboardPage() {
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-6 py-3.5 text-xs font-mono uppercase tracking-wider font-semibold text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
               >
                 <span>Marketplace Registry</span>
+
                 <ArrowRight size={15} />
               </button>
 
@@ -187,6 +343,7 @@ export default function FarmerDashboardPage() {
             whileHover={{ y: -3 }}
             className="rounded-[24px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-5 sm:p-6 shadow-soft flex flex-col justify-between"
           >
+
             <div className="flex items-center justify-between mb-4">
 
               <span className="text-[11px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/60 font-medium">
@@ -202,15 +359,21 @@ export default function FarmerDashboardPage() {
             <div>
 
               <div className="text-2xl sm:text-3xl font-display font-semibold text-ink dark:text-sand-50 font-mono tracking-tight">
+
                 {primaryProject.areaHectares}
+
                 <span className="text-sm font-sans font-normal text-ink-soft">
                   {" "}ha
                 </span>
+
               </div>
 
               <div className="flex items-center gap-1.5 mt-1.5 text-xs text-mangrove-700 dark:text-mangrove-300 font-medium">
+
                 <Sparkles size={13} />
+
                 <span>1 Active Site</span>
+
               </div>
 
             </div>
@@ -238,10 +401,13 @@ export default function FarmerDashboardPage() {
             <div>
 
               <div className="text-2xl sm:text-3xl font-display font-semibold text-ink dark:text-sand-50 font-mono tracking-tight">
+
                 {primaryProject.estSequestrationTonnes}
+
                 <span className="text-xs font-sans font-normal text-ink-soft">
                   {" "}tCO₂e/yr
                 </span>
+
               </div>
 
               <p className="text-xs text-ink-soft dark:text-sand-100/60 mt-1.5">
@@ -309,10 +475,12 @@ export default function FarmerDashboardPage() {
             <div>
 
               <div className="text-2xl sm:text-3xl font-display font-semibold text-ink dark:text-sand-50 font-mono tracking-tight">
+
                 ₹
-                {(primaryProject.estSequestrationTonnes * 1800).toLocaleString(
-                  "en-IN"
-                )}
+                {(
+                  primaryProject.estSequestrationTonnes * 1800
+                ).toLocaleString("en-IN")}
+
               </div>
 
               <p className="text-xs text-ink-soft dark:text-sand-100/60 mt-1.5">
@@ -360,6 +528,7 @@ export default function FarmerDashboardPage() {
                     </p>
 
                   </div>
+
                 </div>
 
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-medium bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/20">
@@ -541,7 +710,8 @@ export default function FarmerDashboardPage() {
                 </h3>
 
                 <p className="text-xs text-ink-soft dark:text-sand-100/60 max-w-sm leading-relaxed">
-                  Verified carbon tokens ($bCO2) will be minted upon completion of the auditor review stage.
+                  Verified carbon tokens ($bCO2) will be minted upon
+                  completion of the auditor review stage.
                 </p>
 
               </div>
@@ -570,13 +740,16 @@ export default function FarmerDashboardPage() {
                   onClick={() => setIsRegisterModalOpen(true)}
                   className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-mangrove-500/20 bg-mangrove-500/10 hover:bg-mangrove-500/20 p-4 text-xs font-medium text-mangrove-900 dark:text-mangrove-300 shadow-sm transition-all group"
                 >
+
                   <PlusCircle
                     size={20}
                     className="text-mangrove-700 dark:text-mangrove-300 group-hover:scale-110 transition-transform"
                   />
+
                   <span className="text-[11px] font-semibold truncate">
                     New Plot
                   </span>
+
                 </button>
 
                 <button
@@ -586,6 +759,7 @@ export default function FarmerDashboardPage() {
                   }
                   className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-ocean-900/10 bg-sand-50/80 dark:border-sand-100/10 dark:bg-[#071a20]/80 p-4 text-xs font-medium text-ink dark:text-sand-50 shadow-sm hover:bg-white dark:hover:bg-[#082028] transition-all group"
                 >
+
                   <FileText
                     size={20}
                     className="text-ocean-900 dark:text-sand-100 group-hover:scale-110 transition-transform"
@@ -594,6 +768,7 @@ export default function FarmerDashboardPage() {
                   <span className="text-[11px] font-semibold truncate">
                     Deeds & MRV
                   </span>
+
                 </button>
 
                 <button
@@ -603,6 +778,7 @@ export default function FarmerDashboardPage() {
                   }
                   className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-ocean-900/10 bg-sand-50/80 dark:border-sand-100/10 dark:bg-[#071a20]/80 p-4 text-xs font-medium text-ink dark:text-sand-50 shadow-sm hover:bg-white dark:hover:bg-[#082028] transition-all group"
                 >
+
                   <UserPen
                     size={20}
                     className="text-mangrove-600 dark:text-mangrove-400 group-hover:scale-110 transition-transform"
@@ -611,6 +787,7 @@ export default function FarmerDashboardPage() {
                   <span className="text-[11px] font-semibold truncate">
                     Entity Profile
                   </span>
+
                 </button>
 
                 <button
@@ -618,6 +795,7 @@ export default function FarmerDashboardPage() {
                   onClick={() => setIsSupportModalOpen(true)}
                   className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-ocean-900/10 bg-sand-50/80 dark:border-sand-100/10 dark:bg-[#071a20]/80 p-4 text-xs font-medium text-ink dark:text-sand-50 shadow-sm hover:bg-white dark:hover:bg-[#082028] transition-all group"
                 >
+
                   <HelpCircle
                     size={20}
                     className="text-ocean-900 dark:text-sand-100 group-hover:scale-110 transition-transform"
@@ -626,6 +804,7 @@ export default function FarmerDashboardPage() {
                   <span className="text-[11px] font-semibold truncate">
                     Support Hub
                   </span>
+
                 </button>
 
               </div>
@@ -653,6 +832,7 @@ export default function FarmerDashboardPage() {
               <ul className="space-y-2.5 text-xs text-ink-soft dark:text-sand-100/80">
 
                 <li className="flex items-start gap-2">
+
                   <span className="text-mangrove-600 dark:text-mangrove-400 font-bold">
                     •
                   </span>
@@ -660,6 +840,7 @@ export default function FarmerDashboardPage() {
                   <span>
                     Sentinel-2 satellite baseline capture verified.
                   </span>
+
                 </li>
 
                 <li className="flex items-start gap-2">
@@ -685,6 +866,7 @@ export default function FarmerDashboardPage() {
       {/* MODAL DIALOGS */}
       <AnimatePresence>
 
+        {/* REGISTER NEW PLOT MODAL */}
         {isRegisterModalOpen && (
           <Modal
             title="Register New Plot"
@@ -724,6 +906,7 @@ export default function FarmerDashboardPage() {
           </Modal>
         )}
 
+        {/* SUPPORT MODAL */}
         {isSupportModalOpen && (
           <Modal
             title="Project Operator Support"
@@ -762,6 +945,7 @@ export default function FarmerDashboardPage() {
 }
 
 /* REUSABLE LIGHTWEIGHT MODAL COMPONENT */
+
 function Modal({
   title,
   children,
@@ -805,6 +989,7 @@ function Modal({
         {children}
 
       </motion.div>
+
     </motion.div>
   );
 }

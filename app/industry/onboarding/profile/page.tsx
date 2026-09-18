@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -26,70 +26,156 @@ import {
 } from "lucide-react";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getSupabaseClient } from "@/lib/supabase";
 
 // Zod Validation Schema
 const industryProfileSchema = z.object({
   // 1. Company Information
-  companyName: z.string().min(2, { message: "Company name is required" }),
-  industryType: z.string().min(1, { message: "Please select an industry type" }),
+  companyName: z.string().min(2, {
+    message: "Company name is required",
+  }),
+
+  industryType: z.string().min(1, {
+    message: "Please select an industry type",
+  }),
+
   gstNumber: z
     .string()
-    .min(15, { message: "GSTIN must be 15 characters" })
-    .max(15, { message: "GSTIN must be 15 characters" })
-    .regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, {
-      message: "Invalid GSTIN format",
-    }),
+    .min(15, {
+      message: "GSTIN must be 15 characters",
+    })
+    .max(15, {
+      message: "GSTIN must be 15 characters",
+    })
+    .regex(
+      /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/,
+      {
+        message: "Invalid GSTIN format",
+      }
+    ),
+
   cinNumber: z
     .string()
-    .min(21, { message: "CIN must be 21 characters" })
-    .max(21, { message: "CIN must be 21 characters" }),
-  website: z.string().url({ message: "Invalid URL format" }).optional().or(z.literal("")),
+    .min(21, {
+      message: "CIN must be 21 characters",
+    })
+    .max(21, {
+      message: "CIN must be 21 characters",
+    }),
+
+  website: z
+    .string()
+    .url({
+      message: "Invalid URL format",
+    })
+    .optional()
+    .or(z.literal("")),
 
   // 2. Company Address
-  addressLine1: z.string().min(3, { message: "Address is required" }),
+  addressLine1: z.string().min(3, {
+    message: "Address is required",
+  }),
+
   addressLine2: z.string().optional(),
-  city: z.string().min(2, { message: "City is required" }),
-  state: z.string().min(2, { message: "State is required" }),
+
+  city: z.string().min(2, {
+    message: "City is required",
+  }),
+
+  state: z.string().min(2, {
+    message: "State is required",
+  }),
+
   pincode: z
     .string()
-    .min(6, { message: "Pincode must be 6 digits" })
-    .max(6, { message: "Pincode must be 6 digits" }),
+    .min(6, {
+      message: "Pincode must be 6 digits",
+    })
+    .max(6, {
+      message: "Pincode must be 6 digits",
+    }),
+
   country: z.string(),
 
   // 3. Contact Person
-  contactName: z.string().min(2, { message: "Full name is required" }),
-  contactDesignation: z.string().min(2, { message: "Designation is required" }),
-  contactEmail: z.string().email({ message: "Valid email required" }),
-  contactPhone: z
-    .string()
-    .min(10, { message: "Phone number must be at least 10 digits" }),
+  contactName: z.string().min(2, {
+    message: "Full name is required",
+  }),
+
+  contactDesignation: z.string().min(2, {
+    message: "Designation is required",
+  }),
+
+  contactEmail: z.string().email({
+    message: "Valid email required",
+  }),
+
+  contactPhone: z.string().min(10, {
+    message: "Phone number must be at least 10 digits",
+  }),
 
   // 4. Facility Details
-  facilityName: z.string().min(2, { message: "Facility name is required" }),
+  facilityName: z.string().min(2, {
+    message: "Facility name is required",
+  }),
+
   latitude: z
     .string()
-    .min(1, { message: "Latitude required" })
-    .refine((val) => !isNaN(Number(val)) && Number(val) >= -90 && Number(val) <= 90, {
-      message: "Latitude must be between -90 and 90",
-    }),
+    .min(1, {
+      message: "Latitude required",
+    })
+    .refine(
+      (val) =>
+        !isNaN(Number(val)) &&
+        Number(val) >= -90 &&
+        Number(val) <= 90,
+      {
+        message: "Latitude must be between -90 and 90",
+      }
+    ),
+
   longitude: z
     .string()
-    .min(1, { message: "Longitude required" })
-    .refine((val) => !isNaN(Number(val)) && Number(val) >= -180 && Number(val) <= 180, {
-      message: "Longitude must be between -180 and 180",
-    }),
+    .min(1, {
+      message: "Longitude required",
+    })
+    .refine(
+      (val) =>
+        !isNaN(Number(val)) &&
+        Number(val) >= -180 &&
+        Number(val) <= 180,
+      {
+        message: "Longitude must be between -180 and 180",
+      }
+    ),
+
   annualEmissions: z
     .string()
-    .min(1, { message: "Annual CO₂ emissions required" })
-    .refine((val) => !isNaN(Number(val)) && Number(val) >= 0, {
-      message: "Must be a positive number",
-    }),
+    .min(1, {
+      message: "Annual CO₂ emissions required",
+    })
+    .refine(
+      (val) =>
+        !isNaN(Number(val)) &&
+        Number(val) >= 0,
+      {
+        message: "Must be a positive number",
+      }
+    ),
+
   employeeCount: z
     .string()
-    .min(1, { message: "Number of employees required" })
-    .refine((val) => !isNaN(Number(val)) && Number(val) > 0, {
-      message: "Must be a positive number",
-    }),
+    .min(1, {
+      message: "Number of employees required",
+    })
+    .refine(
+      (val) =>
+        !isNaN(Number(val)) &&
+        Number(val) > 0,
+      {
+        message: "Must be a positive number",
+      }
+    ),
 });
 
 type IndustryProfileData = z.infer<typeof industryProfileSchema>;
@@ -110,14 +196,18 @@ const INDUSTRY_TYPES = [
 
 export default function IndustryProfilePage() {
   const router = useRouter();
+
   const [isDraftSaved, setIsDraftSaved] = useState(false);
 
   const {
     register,
     handleSubmit,
+    getValues,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<IndustryProfileData>({
     resolver: zodResolver(industryProfileSchema),
+
     defaultValues: {
       companyName: "",
       industryType: "",
@@ -142,24 +232,343 @@ export default function IndustryProfilePage() {
     },
   });
 
+  // Load previously saved industry profile
+  useEffect(() => {
+    const loadIndustryProfile = async () => {
+      const supabase = getSupabaseClient();
+
+      if (!supabase) {
+        console.error("Supabase is not configured.");
+        return;
+      }
+
+      try {
+        const {
+          data: { user },
+          error: userError,
+        } = await supabase.auth.getUser();
+
+        if (userError || !user) {
+          router.push("/login?role=buyer");
+          return;
+        }
+
+        const { data: profile, error } = await supabase
+          .from("industry_profiles")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (error) {
+          console.error(
+            "Error loading industry profile:",
+            error
+          );
+          return;
+        }
+
+        if (profile) {
+          reset({
+            companyName: profile.company_name || "",
+            industryType: profile.industry_type || "",
+            gstNumber: profile.gst_number || "",
+            cinNumber: profile.cin_number || "",
+            website: profile.website || "",
+            addressLine1: profile.address_line1 || "",
+            addressLine2: profile.address_line2 || "",
+            city: profile.city || "",
+            state: profile.state || "",
+            pincode: profile.pincode || "",
+            country: profile.country || "India",
+
+            contactName: profile.contact_name || "",
+            contactDesignation:
+              profile.contact_designation || "",
+            contactEmail: profile.contact_email || "",
+            contactPhone: profile.contact_phone || "",
+
+            facilityName: profile.facility_name || "",
+
+            latitude:
+              profile.latitude !== null &&
+              profile.latitude !== undefined
+                ? String(profile.latitude)
+                : "",
+
+            longitude:
+              profile.longitude !== null &&
+              profile.longitude !== undefined
+                ? String(profile.longitude)
+                : "",
+
+            annualEmissions:
+              profile.annual_emissions !== null &&
+              profile.annual_emissions !== undefined
+                ? String(profile.annual_emissions)
+                : "",
+
+            employeeCount:
+              profile.employee_count !== null &&
+              profile.employee_count !== undefined
+                ? String(profile.employee_count)
+                : "",
+          });
+        }
+      } catch (error) {
+        console.error(
+          "Unexpected profile loading error:",
+          error
+        );
+      }
+    };
+
+    loadIndustryProfile();
+  }, [reset, router]);
+
+  // Submit completed profile
   const onSubmit = async (data: IndustryProfileData) => {
-    console.log("Profile Data Submitted:", data);
-    router.push("/industry/onboarding/documents");
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      alert("Supabase is not configured.");
+      return;
+    }
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        alert(
+          "Your session has expired. Please login again."
+        );
+
+        router.push("/login?role=buyer");
+        return;
+      }
+
+      const { error } = await supabase
+        .from("industry_profiles")
+        .upsert(
+          {
+            user_id: user.id,
+
+            company_name: data.companyName,
+            industry_type: data.industryType,
+
+            gst_number: data.gstNumber.toUpperCase(),
+            cin_number: data.cinNumber.toUpperCase(),
+
+            website: data.website || null,
+
+            address_line1: data.addressLine1,
+            address_line2: data.addressLine2 || null,
+            city: data.city,
+            state: data.state,
+            pincode: data.pincode,
+            country: data.country,
+
+            contact_name: data.contactName,
+            contact_designation: data.contactDesignation,
+            contact_email: data.contactEmail,
+            contact_phone: data.contactPhone,
+
+            facility_name: data.facilityName,
+
+            latitude: Number(data.latitude),
+            longitude: Number(data.longitude),
+
+            annual_emissions: Number(
+              data.annualEmissions
+            ),
+
+            employee_count: Number(
+              data.employeeCount
+            ),
+
+            onboarding_status: "PENDING_DOCUMENTS",
+
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: "user_id",
+          }
+        );
+
+      if (error) {
+        console.error(
+          "Industry profile save error:",
+          error
+        );
+
+        alert(
+          `Unable to save profile: ${error.message}`
+        );
+
+        return;
+      }
+
+      router.push(
+        "/industry/onboarding/documents"
+      );
+    } catch (error) {
+      console.error(
+        "Unexpected profile error:",
+        error
+      );
+
+      alert(
+        "Something went wrong while saving your profile."
+      );
+    }
   };
 
-  const handleSaveDraft = () => {
-    setIsDraftSaved(true);
-    setTimeout(() => setIsDraftSaved(false), 3000);
+  // Save profile as draft
+  const handleSaveDraft = async () => {
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      alert("Supabase is not configured.");
+      return;
+    }
+
+    try {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        alert("Please login again.");
+
+        router.push("/login?role=buyer");
+        return;
+      }
+
+      const values = getValues();
+
+      const { error } = await supabase
+        .from("industry_profiles")
+        .upsert(
+          {
+            user_id: user.id,
+
+            company_name:
+              values.companyName || null,
+
+            industry_type:
+              values.industryType || null,
+
+            gst_number: values.gstNumber
+              ? values.gstNumber.toUpperCase()
+              : null,
+
+            cin_number: values.cinNumber
+              ? values.cinNumber.toUpperCase()
+              : null,
+
+            website: values.website || null,
+
+            address_line1:
+              values.addressLine1 || null,
+
+            address_line2:
+              values.addressLine2 || null,
+
+            city: values.city || null,
+
+            state: values.state || null,
+
+            pincode: values.pincode || null,
+
+            country:
+              values.country || "India",
+
+            contact_name:
+              values.contactName || null,
+
+            contact_designation:
+              values.contactDesignation || null,
+
+            contact_email:
+              values.contactEmail || null,
+
+            contact_phone:
+              values.contactPhone || null,
+
+            facility_name:
+              values.facilityName || null,
+
+            latitude: values.latitude
+              ? Number(values.latitude)
+              : null,
+
+            longitude: values.longitude
+              ? Number(values.longitude)
+              : null,
+
+            annual_emissions:
+              values.annualEmissions
+                ? Number(values.annualEmissions)
+                : null,
+
+            employee_count:
+              values.employeeCount
+                ? Number(values.employeeCount)
+                : null,
+
+            onboarding_status: "DRAFT",
+
+            updated_at:
+              new Date().toISOString(),
+          },
+          {
+            onConflict: "user_id",
+          }
+        );
+
+      if (error) {
+        console.error(
+          "Draft save error:",
+          error
+        );
+
+        alert(
+          `Unable to save draft: ${error.message}`
+        );
+
+        return;
+      }
+
+      setIsDraftSaved(true);
+
+      setTimeout(() => {
+        setIsDraftSaved(false);
+      }, 3000);
+    } catch (error) {
+      console.error(
+        "Unexpected draft error:",
+        error
+      );
+
+      alert(
+        "Something went wrong while saving the draft."
+      );
+    }
   };
 
   return (
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
+
       {/* Background Ambient Glow */}
       <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[900px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl opacity-70 dark:from-ocean-900/25 dark:via-mangrove-900/15" />
 
       {/* Navigation Header */}
       <header className="relative z-10 border-b border-ocean-900/5 dark:border-sand-100/5 bg-white/40 dark:bg-[#061418]/40 backdrop-blur-md">
         <div className="container-page section-pad flex h-20 items-center justify-between">
+
           <Link
             href="/industry/onboarding"
             className="inline-flex items-center gap-2 text-sm font-medium text-ink/70 hover:text-ink dark:text-sand-100/70 dark:hover:text-sand-50 transition-colors"
@@ -171,11 +580,13 @@ export default function IndustryProfilePage() {
           <div className="flex items-center gap-3">
             <ThemeToggle />
           </div>
+
         </div>
       </header>
 
       {/* Main Container */}
       <main className="relative z-10 flex-1 container-page section-pad py-10 max-w-5xl mx-auto">
+
         {/* Step Indicator Header Bar */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -184,17 +595,21 @@ export default function IndustryProfilePage() {
           className="mb-8 rounded-2xl border border-ocean-900/10 bg-white/80 p-4 shadow-sm dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-4"
         >
           <div className="flex items-center gap-3">
+
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink font-semibold text-sm shadow-sm">
               02
             </div>
+
             <div>
               <span className="font-mono text-[10px] uppercase tracking-wider text-mangrove-700 dark:text-mangrove-300 font-semibold block">
                 Onboarding Step 2 of 4
               </span>
+
               <h2 className="text-base font-semibold text-ink dark:text-sand-50">
                 Facility & Operating Profile
               </h2>
             </div>
+
           </div>
 
           <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-ink-soft dark:text-sand-100/60 bg-sand-50 dark:bg-[#071a20] px-3 py-1.5 rounded-full border border-ocean-900/5 dark:border-sand-100/5">
@@ -205,15 +620,19 @@ export default function IndustryProfilePage() {
 
         {/* Page Header Titles */}
         <div className="text-center max-w-2xl mx-auto mb-10">
+
           <span className="font-mono text-xs uppercase tracking-widest text-mangrove-700 dark:text-mangrove-300 font-medium">
             Industrial Asset Registration
           </span>
+
           <h1 className="mt-2 font-display text-3xl sm:text-4xl font-medium tracking-tight text-ink dark:text-sand-50">
             Corporate & Facility Profile
           </h1>
+
           <p className="mt-2 text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
             Provide organization identity metrics, precise facility coordinates, and operational carbon baseline details to activate automated MRV telemetry.
           </p>
+
         </div>
 
         {/* Draft Notification Toast */}
@@ -224,8 +643,14 @@ export default function IndustryProfilePage() {
             exit={{ opacity: 0 }}
             className="mb-6 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 text-sm flex items-center gap-3 shadow-sm"
           >
-            <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />
-            <span>Progress saved successfully! You can resume completion anytime.</span>
+            <CheckCircle2
+              size={18}
+              className="text-emerald-600 dark:text-emerald-400"
+            />
+
+            <span>
+              Progress saved successfully! You can resume completion anytime.
+            </span>
           </motion.div>
         )}
 
@@ -233,27 +658,42 @@ export default function IndustryProfilePage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
+          transition={{
+            duration: 0.5,
+            delay: 0.1,
+          }}
           className="rounded-[28px] border border-ocean-900/10 bg-white/90 p-6 sm:p-10 shadow-soft dark:border-sand-100/10 dark:bg-[#0a232b]/90 backdrop-blur-xl"
         >
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-10">
+
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="space-y-10"
+          >
+
             {/* 1. COMPANY INFORMATION */}
             <section className="space-y-6">
+
               <div className="flex items-center gap-3 border-b border-ocean-900/10 dark:border-sand-100/10 pb-3">
+
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300">
                   <Building2 size={20} />
                 </div>
+
                 <h3 className="font-display text-lg font-medium text-ink dark:text-sand-50">
                   1. Company Information
                 </h3>
+
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+
                 {/* Company Name */}
                 <div className="sm:col-span-2">
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Company Name *
                   </label>
+
                   <input
                     type="text"
                     placeholder="e.g. Apex Industrial Energy Corp"
@@ -264,18 +704,22 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.companyName && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.companyName.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Industry Type */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Industry Type *
                   </label>
+
                   <select
                     {...register("industryType")}
                     className={`w-full rounded-xl border bg-sand-50/50 px-4 py-2.5 text-sm text-ink transition-all focus:bg-white focus:outline-none focus:ring-2 dark:bg-[#071a20]/60 dark:text-sand-50 ${
@@ -284,29 +728,38 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   >
-                    <option value="">Select Industry Type</option>
+                    <option value="">
+                      Select Industry Type
+                    </option>
+
                     {INDUSTRY_TYPES.map((type) => (
                       <option key={type} value={type}>
                         {type}
                       </option>
                     ))}
                   </select>
+
                   {errors.industryType && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.industryType.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* GST Number */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     GST Number (GSTIN) *
                   </label>
+
                   <div className="relative">
+
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
                       <FileText size={16} />
                     </div>
+
                     <input
                       type="text"
                       placeholder="27AAAAA0000A1Z5"
@@ -317,19 +770,24 @@ export default function IndustryProfilePage() {
                           : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                       }`}
                     />
+
                   </div>
+
                   {errors.gstNumber && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.gstNumber.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* CIN Number */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Company Registration (CIN) *
                   </label>
+
                   <input
                     type="text"
                     placeholder="L27100MH2010PLC203948"
@@ -340,22 +798,28 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.cinNumber && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.cinNumber.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Website */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Website (Optional)
                   </label>
+
                   <div className="relative">
+
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
                       <Globe size={16} />
                     </div>
+
                     <input
                       type="url"
                       placeholder="https://apexindustrial.com"
@@ -366,33 +830,44 @@ export default function IndustryProfilePage() {
                           : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                       }`}
                     />
+
                   </div>
+
                   {errors.website && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.website.message}
                     </p>
                   )}
+
                 </div>
+
               </div>
             </section>
 
             {/* 2. COMPANY ADDRESS */}
             <section className="space-y-6">
+
               <div className="flex items-center gap-3 border-b border-ocean-900/10 dark:border-sand-100/10 pb-3">
+
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300">
                   <MapPin size={20} />
                 </div>
+
                 <h3 className="font-display text-lg font-medium text-ink dark:text-sand-50">
                   2. Registered Corporate Address
                 </h3>
+
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+
                 {/* Address Line 1 */}
                 <div className="sm:col-span-2">
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Address Line 1 *
                   </label>
+
                   <input
                     type="text"
                     placeholder="Plot 42, MIDC Industrial Area"
@@ -403,31 +878,38 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.addressLine1 && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.addressLine1.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Address Line 2 */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Address Line 2
                   </label>
+
                   <input
                     type="text"
                     placeholder="Phase II, Near Tech Park"
                     {...register("addressLine2")}
                     className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint/60 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15 dark:bg-[#071a20]/60 dark:text-sand-50 dark:placeholder:text-sand-100/40"
                   />
+
                 </div>
 
                 {/* City */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     City *
                   </label>
+
                   <input
                     type="text"
                     placeholder="Navi Mumbai"
@@ -438,18 +920,22 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.city && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.city.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* State */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     State *
                   </label>
+
                   <input
                     type="text"
                     placeholder="Maharashtra"
@@ -460,18 +946,22 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.state && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.state.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Pincode */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Pincode *
                   </label>
+
                   <input
                     type="text"
                     placeholder="400710"
@@ -482,45 +972,58 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.pincode && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.pincode.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Country */}
                 <div className="sm:col-span-3">
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Country
                   </label>
+
                   <input
                     type="text"
                     disabled
                     {...register("country")}
                     className="w-full sm:w-1/3 rounded-xl border border-ocean-900/10 bg-sand-100/60 px-4 py-2.5 text-sm text-ink-soft font-medium dark:bg-[#071a20]/40 dark:text-sand-100/60 cursor-not-allowed"
                   />
+
                 </div>
+
               </div>
             </section>
 
             {/* 3. CONTACT PERSON */}
             <section className="space-y-6">
+
               <div className="flex items-center gap-3 border-b border-ocean-900/10 dark:border-sand-100/10 pb-3">
+
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300">
                   <UserCheck size={20} />
                 </div>
+
                 <h3 className="font-display text-lg font-medium text-ink dark:text-sand-50">
                   3. Authorized Contact Officer
                 </h3>
+
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+
                 {/* Contact Full Name */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Full Name *
                   </label>
+
                   <input
                     type="text"
                     placeholder="Vikramaditya Sharma"
@@ -531,18 +1034,22 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.contactName && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.contactName.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Designation */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Designation *
                   </label>
+
                   <input
                     type="text"
                     placeholder="Head of ESG & Operations"
@@ -553,22 +1060,28 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.contactDesignation && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.contactDesignation.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Contact Email */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Official Email *
                   </label>
+
                   <div className="relative">
+
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
                       <Mail size={16} />
                     </div>
+
                     <input
                       type="email"
                       placeholder="v.sharma@apexindustrial.com"
@@ -579,23 +1092,30 @@ export default function IndustryProfilePage() {
                           : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                       }`}
                     />
+
                   </div>
+
                   {errors.contactEmail && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.contactEmail.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Phone Number */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Direct Phone Number *
                   </label>
+
                   <div className="relative">
+
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
                       <Phone size={16} />
                     </div>
+
                     <input
                       type="tel"
                       placeholder="+91 98200 12345"
@@ -606,33 +1126,44 @@ export default function IndustryProfilePage() {
                           : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                       }`}
                     />
+
                   </div>
+
                   {errors.contactPhone && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.contactPhone.message}
                     </p>
                   )}
+
                 </div>
+
               </div>
             </section>
 
             {/* 4. FACILITY DETAILS */}
             <section className="space-y-6">
+
               <div className="flex items-center gap-3 border-b border-ocean-900/10 dark:border-sand-100/10 pb-3">
+
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300">
                   <Factory size={20} />
                 </div>
+
                 <h3 className="font-display text-lg font-medium text-ink dark:text-sand-50">
                   4. Industrial Facility & Telemetry Coordinates
                 </h3>
+
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+
                 {/* Facility Name */}
                 <div className="sm:col-span-2">
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Primary Plant / Facility Name *
                   </label>
+
                   <input
                     type="text"
                     placeholder="e.g. Navi Mumbai Chemical Plant Alpha"
@@ -643,22 +1174,28 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.facilityName && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.facilityName.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Latitude */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Facility Latitude *
                   </label>
+
                   <div className="relative">
+
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
                       <Compass size={16} />
                     </div>
+
                     <input
                       type="text"
                       placeholder="19.0330"
@@ -669,23 +1206,30 @@ export default function IndustryProfilePage() {
                           : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                       }`}
                     />
+
                   </div>
+
                   {errors.latitude && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.latitude.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Longitude */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Facility Longitude *
                   </label>
+
                   <div className="relative">
+
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
                       <Compass size={16} />
                     </div>
+
                     <input
                       type="text"
                       placeholder="73.0297"
@@ -696,19 +1240,24 @@ export default function IndustryProfilePage() {
                           : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                       }`}
                     />
+
                   </div>
+
                   {errors.longitude && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.longitude.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Annual CO2 Emissions */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Est. Annual CO₂ Emissions (Metric Tonnes) *
                   </label>
+
                   <input
                     type="number"
                     placeholder="125000"
@@ -719,22 +1268,28 @@ export default function IndustryProfilePage() {
                         : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                     }`}
                   />
+
                   {errors.annualEmissions && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.annualEmissions.message}
                     </p>
                   )}
+
                 </div>
 
                 {/* Total Employees */}
                 <div>
+
                   <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-1.5">
                     Total Facility Employees *
                   </label>
+
                   <div className="relative">
+
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-ink-faint dark:text-sand-100/40">
                       <Users size={16} />
                     </div>
+
                     <input
                       type="number"
                       placeholder="450"
@@ -745,18 +1300,24 @@ export default function IndustryProfilePage() {
                           : "border-ocean-900/15 focus:border-mangrove-500 focus:ring-mangrove-500/30 dark:border-sand-100/15"
                       }`}
                     />
+
                   </div>
+
                   {errors.employeeCount && (
                     <p className="mt-1 text-xs text-red-500 dark:text-red-400 font-medium">
                       {errors.employeeCount.message}
                     </p>
                   )}
+
                 </div>
+
               </div>
             </section>
 
             {/* Form Action Controls */}
             <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-4 border-t border-ocean-900/10 dark:border-sand-100/10 pt-6">
+
+              {/* Save Draft */}
               <button
                 type="button"
                 onClick={handleSaveDraft}
@@ -766,6 +1327,7 @@ export default function IndustryProfilePage() {
                 <span>Save Draft</span>
               </button>
 
+              {/* Submit */}
               <button
                 type="submit"
                 disabled={isSubmitting}
@@ -773,17 +1335,24 @@ export default function IndustryProfilePage() {
               >
                 {isSubmitting ? (
                   <>
-                    <Loader2 size={16} className="animate-spin" />
+                    <Loader2
+                      size={16}
+                      className="animate-spin"
+                    />
                     <span>Saving...</span>
                   </>
                 ) : (
                   <>
-                    <span>Proceed to Document Verification</span>
+                    <span>
+                      Proceed to Document Verification
+                    </span>
                     <ArrowRight size={16} />
                   </>
                 )}
               </button>
+
             </div>
+
           </form>
         </motion.div>
       </main>

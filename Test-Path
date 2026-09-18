@@ -1,0 +1,286 @@
+"use client";
+
+import React from "react";
+import { useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  CheckCircle2,
+  Lock,
+  Building2,
+  FileText,
+  ShieldCheck,
+  ArrowRight,
+} from "lucide-react";
+
+import { Navbar } from "@/components/navbar";
+import { Footer } from "@/components/footer";
+
+export default function IndustryOnboardingPage() {
+  const router = useRouter();
+
+  const currentStep = 2;
+
+  const steps = [
+    {
+      number: 1,
+      title: "Account",
+      description: "Industry account created",
+      completed: true,
+    },
+    {
+      number: 2,
+      title: "Facility Profile",
+      description: "Enter company and facility details",
+      completed: false,
+    },
+    {
+      number: 3,
+      title: "ESG Compliance",
+      description: "Upload compliance documents",
+      completed: false,
+    },
+    {
+      number: 4,
+      title: "Verification",
+      description: "Authority verification",
+      completed: false,
+    },
+    {
+      number: 5,
+      title: "Dashboard",
+      description: "Access industry dashboard",
+      completed: false,
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#f7f8fa] text-slate-900">
+      <Navbar />
+
+      <main className="mx-auto max-w-7xl px-6 py-12">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+          className="mb-10"
+        >
+          <p className="mb-2 text-sm font-semibold uppercase tracking-wider text-emerald-600">
+            Industry Onboarding
+          </p>
+
+          <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
+            Complete your industry profile
+          </h1>
+
+          <p className="mt-3 max-w-2xl text-slate-600">
+            Complete the onboarding process to register your organization,
+            submit compliance documents, and get verified by the authority.
+          </p>
+        </motion.div>
+
+        {/* Progress Steps */}
+        <div className="mb-10 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+            {steps.map((step, index) => {
+              const isCurrent = step.number === currentStep;
+              const isCompleted = step.completed;
+
+              return (
+                <React.Fragment key={step.number}>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 ${
+                        isCompleted
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : isCurrent
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-700"
+                          : "border-slate-300 bg-white text-slate-400"
+                      }`}
+                    >
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-5 w-5" />
+                      ) : (
+                        <span className="font-semibold">{step.number}</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <p
+                        className={`text-sm font-semibold ${
+                          isCurrent
+                            ? "text-emerald-700"
+                            : isCompleted
+                            ? "text-slate-900"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {step.title}
+                      </p>
+
+                      <p className="text-xs text-slate-500">
+                        {step.description}
+                      </p>
+                    </div>
+                  </div>
+
+                  {index < steps.length - 1 && (
+                    <div className="hidden h-px flex-1 bg-slate-200 md:block" />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Main Cards */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Account */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm"
+          >
+            <div className="mb-5 flex items-start justify-between">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Completed
+              </span>
+            </div>
+
+            <h2 className="text-xl font-semibold">Account Verified</h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Your industry account has been successfully created. You can
+              now continue with your organization and facility details.
+            </p>
+          </motion.div>
+
+          {/* Facility Profile */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="rounded-2xl border border-emerald-300 bg-white p-6 shadow-sm"
+          >
+            <div className="mb-5 flex items-start justify-between">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <Building2 className="h-6 w-6" />
+              </div>
+
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Current Step
+              </span>
+            </div>
+
+            <h2 className="text-xl font-semibold">
+              Facility & Operating Profile
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Add your company information, facility details, contact
+              information, GST/CIN details and other operating information.
+            </p>
+
+            <button
+              onClick={() => router.push("/industry/onboarding/profile")}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+            >
+              Continue to Facility Profile
+              <ArrowRight className="h-4 w-4" />
+            </button>
+          </motion.div>
+
+          {/* ESG Compliance */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+          >
+            <div className="mb-5 flex items-start justify-between">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                <FileText className="h-6 w-6" />
+              </div>
+
+              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                <Lock className="h-3 w-3" />
+                Locked
+              </span>
+            </div>
+
+            <h2 className="text-xl font-semibold text-slate-500">
+              ESG Compliance
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Upload company registration, GST certificate, pollution control
+              documents, carbon audit reports and other compliance filings.
+            </p>
+          </motion.div>
+
+          {/* Verification */}
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.7 }}
+            className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+          >
+            <div className="mb-5 flex items-start justify-between">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                <ShieldCheck className="h-6 w-6" />
+              </div>
+
+              <span className="flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500">
+                <Lock className="h-3 w-3" />
+                Locked
+              </span>
+            </div>
+
+            <h2 className="text-xl font-semibold text-slate-500">
+              Industrial MRV Verification
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-slate-500">
+              Your submitted information and documents will be reviewed by the
+              authority before your industry dashboard is activated.
+            </p>
+          </motion.div>
+        </div>
+
+        {/* Information Box */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="mt-8 rounded-2xl border border-emerald-100 bg-emerald-50 p-6"
+        >
+          <div className="flex gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-emerald-600 shadow-sm">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-emerald-900">
+                Why verification is required
+              </h3>
+
+              <p className="mt-1 text-sm leading-6 text-emerald-800">
+                BlueCarbon Nexus verifies industry organizations before they
+                can access the marketplace and carbon credit transactions.
+                This helps maintain the authenticity and traceability of the
+                ecosystem.
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      </main>
+
+      <Footer />
+    </div>
+  );
+}

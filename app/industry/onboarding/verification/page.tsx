@@ -1,334 +1,969 @@
 "use client";
 
-import React from "react";
-import Link from "next/link";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import {
-  ShieldCheck,
-  Clock,
-  Calendar,
-  Hash,
-  Bell,
   CheckCircle2,
+  XCircle,
+  AlertCircle,
+  FileText,
+  Loader2,
+  ShieldCheck,
+  RefreshCw,
   ArrowLeft,
-  ArrowRight,
-  Building2,
-  FileSearch,
-  LayoutDashboard,
-  Award,
-  Lock,
+  ExternalLink,
 } from "lucide-react";
 
-import { ThemeToggle } from "@/components/theme-toggle";
+import { Navbar } from "@/components/navbar";
+import { Footer } from "@/components/footer";
+import { getSupabaseClient } from "@/lib/supabase";
 
-// Framer Motion Animation Variants
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.1,
-    },
-  },
+// ==========================================
+// TYPES
+// ==========================================
+
+type OnboardingStatus =
+  | "DRAFT"
+  | "PENDING_DOCUMENTS"
+  | "PENDING_VERIFICATION"
+  | "APPROVED"
+  | "REJECTED";
+
+interface IndustryProfile {
+  id: string;
+  user_id: string;
+  company_name: string | null;
+  industry_type: string | null;
+  facility_name: string | null;
+  onboarding_status: OnboardingStatus;
+  rejection_reason: string | null;
+}
+
+interface IndustryDocument {
+  id: string;
+  user_id: string;
+  document_type: string;
+  file_name: string;
+  storage_path: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+  rejection_reason: string | null;
+  uploaded_at: string;
+  reviewed_at: string | null;
+}
+
+// ==========================================
+// DOCUMENT LABELS
+// ==========================================
+
+const documentLabels: Record<string, string> = {
+  companyRegistration: "Company Registration Certificate",
+  gstCertificate: "GST Certificate",
+  pcbCertificate: "Pollution Control Board Certificate",
+  environmentalClearance: "Environmental Clearance",
+  carbonAuditReport: "Carbon Audit Report",
+  esgReport: "ESG Report",
+  authorizationLetter: "Authorization Letter",
+  additionalDocs: "Additional Documents",
 };
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 25 },
-  visible: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.5, ease: [0.16, 1, 0.3, 1] },
-  },
-};
+// ==========================================
+// REQUIRED DOCUMENTS
+// ==========================================
 
-export default function IndustryVerificationStatusPage() {
+const REQUIRED_DOCUMENTS = [
+  "companyRegistration",
+  "gstCertificate",
+  "pcbCertificate",
+  "carbonAuditReport",
+  "authorizationLetter",
+];
+
+// ==========================================
+// MAIN PAGE
+// ==========================================
+
+export default function IndustryVerificationPage() {
   const router = useRouter();
 
-  // Generate today's date formatted nicely for the Submission Date card
-  const todayFormatted = new Date().toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  const [profile, setProfile] =
+    useState<IndustryProfile | null>(null);
 
-  return (
-    <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
-      {/* Background Ambient Glow */}
-      <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[700px] w-[1000px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl opacity-70 dark:from-ocean-900/30 dark:via-mangrove-900/20" />
+  const [documents, setDocuments] = useState<IndustryDocument[]>(
+    []
+  );
 
-      {/* Header */}
-      <header className="relative z-10 border-b border-ocean-900/5 dark:border-sand-100/5 bg-white/40 dark:bg-[#061418]/40 backdrop-blur-md">
-        <div className="container-page section-pad flex h-20 items-center justify-between">
-          <Link
-            href="/industry/onboarding/documents"
-            className="inline-flex items-center gap-2 text-sm font-medium text-ink/70 hover:text-ink dark:text-sand-100/70 dark:hover:text-sand-50 transition-colors"
-          >
-            <ArrowLeft size={16} />
-            <span>Back to Documents</span>
-          </Link>
+  const [loading, setLoading] = useState(true);
 
-          <div className="flex items-center gap-3">
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+  const [refreshing, setRefreshing] = useState(false);
 
-      {/* Main Content Area */}
-      <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-5xl">
-        {/* Header Section */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-          className="text-center space-y-4 mb-8"
-        >
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-sm backdrop-blur-md">
-            <Building2 size={14} className="text-mangrove-600 dark:text-mangrove-400" />
-            <span className="font-mono text-xs uppercase tracking-widest text-ink-soft dark:text-sand-100/80">
-              Corporate Onboarding Complete
-            </span>
-          </div>
+  const [error, setError] = useState("");
 
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-display font-medium text-ink dark:text-sand-50 tracking-tight">
-            Compliance Dossier Submitted
-          </h1>
+  // ==========================================
+  // LOAD DATA
+  // ==========================================
 
-          <p className="text-sm sm:text-base text-ink-soft dark:text-sand-100/70 max-w-xl mx-auto leading-relaxed">
-            Your corporate compliance filings and registry credentials have been received. Our compliance team and automated KYC audit system are currently verifying your documentation.
-          </p>
-        </motion.div>
+  useEffect(() => {
+    loadVerificationStatus();
+  }, []);
 
-        {/* Step Indicator (Step 4 of 4) */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.15 }}
-          className="mb-10 rounded-2xl border border-ocean-900/10 bg-white/80 p-4 shadow-sm dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-4"
-        >
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink font-semibold text-sm shadow-sm">
-              04
-            </div>
-            <div>
-              <span className="font-mono text-[10px] uppercase tracking-wider text-mangrove-700 dark:text-mangrove-300 font-semibold block">
-                Onboarding Step 4 of 4
-              </span>
-              <h2 className="text-base font-semibold text-ink dark:text-sand-50">
-                Verification & Approval Status
-              </h2>
-            </div>
-          </div>
+  const loadVerificationStatus = async (
+    showRefreshLoader = false
+  ) => {
+    const supabase = getSupabaseClient();
 
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <span className="text-xs font-mono font-medium text-ink/70 dark:text-sand-100/70">
-                Status: Under Review
-              </span>
-            </div>
-            <div className="w-24 h-2 bg-sand-200 dark:bg-[#071a20] rounded-full overflow-hidden border border-ocean-900/10 dark:border-sand-100/10">
-              <div className="h-full bg-amber-500 w-3/4 animate-pulse" />
-            </div>
-          </div>
-        </motion.div>
+    if (!supabase) {
+      setError("Supabase client could not be initialized.");
+      setLoading(false);
+      return;
+    }
 
-        {/* Main Content Stagger Wrapper */}
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="space-y-8"
-        >
-          {/* Main Status Hero Card */}
-          <motion.div
-            variants={cardVariants}
-            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-10 shadow-soft text-center relative overflow-hidden"
-          >
-            {/* Soft Ambient Inner Glow */}
-            <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-40 w-80 bg-mangrove-500/10 blur-3xl rounded-full" />
+    try {
+      if (showRefreshLoader) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
 
-            {/* Badge Icon */}
-            <div className="relative z-10 flex justify-center mb-6">
-              <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-mangrove-100 text-mangrove-700 dark:bg-mangrove-900/40 dark:text-mangrove-300 shadow-card border border-mangrove-500/20">
-                <ShieldCheck size={44} strokeWidth={2.2} />
-              </div>
-            </div>
+      setError("");
 
-            {/* Status Header */}
-            <div className="relative z-10 space-y-2 mb-8">
-              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-mono font-medium bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/20">
-                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                <span>Pending Compliance Review</span>
-              </div>
-              <h2 className="font-display text-2xl sm:text-3xl font-medium text-ink dark:text-sand-50 pt-2">
-                Verification in Progress
-              </h2>
-              <p className="text-sm text-ink-soft dark:text-sand-100/70 max-w-md mx-auto leading-relaxed">
-                Your submitted GST, PCB permits, and carbon audit filings are actively undergoing regulatory validation.
-              </p>
-            </div>
+      // ==========================================
+      // CHECK USER
+      // ==========================================
 
-            {/* Information Grid (4 Stat Cards) */}
-            <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-left">
-              {/* Card 1 — Estimated Review SLA */}
-              <div className="rounded-2xl border border-ocean-900/10 bg-sand-50/60 dark:border-sand-100/10 dark:bg-[#071a20]/60 p-4 flex items-center gap-3.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300 shrink-0">
-                  <Clock size={20} />
-                </div>
-                <div>
-                  <span className="block text-[11px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/60">
-                    SLA Timeline
-                  </span>
-                  <span className="text-sm font-semibold text-ink dark:text-sand-50 font-mono">
-                    12–24 Hours
-                  </span>
-                </div>
-              </div>
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
-              {/* Card 2 — Submission Date */}
-              <div className="rounded-2xl border border-ocean-900/10 bg-sand-50/60 dark:border-sand-100/10 dark:bg-[#071a20]/60 p-4 flex items-center gap-3.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-mangrove-500/20 text-mangrove-800 dark:bg-mangrove-500/20 dark:text-mangrove-300 shrink-0">
-                  <Calendar size={20} />
-                </div>
-                <div>
-                  <span className="block text-[11px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/60">
-                    Submitted On
-                  </span>
-                  <span className="text-sm font-semibold text-ink dark:text-sand-50 font-mono">
-                    {todayFormatted}
-                  </span>
-                </div>
-              </div>
+      if (!user) {
+        router.push("/login");
+        return;
+      }
 
-              {/* Card 3 — Entity Reference Code */}
-              <div className="rounded-2xl border border-ocean-900/10 bg-sand-50/60 dark:border-sand-100/10 dark:bg-[#071a20]/60 p-4 flex items-center gap-3.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300 shrink-0">
-                  <Hash size={20} />
-                </div>
-                <div>
-                  <span className="block text-[11px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/60">
-                    Corporate Ref ID
-                  </span>
-                  <span className="text-sm font-semibold text-ink dark:text-sand-50 font-mono">
-                    IND-2026-8842
-                  </span>
-                </div>
-              </div>
+      // ==========================================
+      // LOAD INDUSTRY PROFILE
+      // ==========================================
 
-              {/* Card 4 — Notification Status */}
-              <div className="rounded-2xl border border-ocean-900/10 bg-sand-50/60 dark:border-sand-100/10 dark:bg-[#071a20]/60 p-4 flex items-center gap-3.5">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-mangrove-500/20 text-mangrove-800 dark:bg-mangrove-500/20 dark:text-mangrove-300 shrink-0">
-                  <Bell size={20} />
-                </div>
-                <div>
-                  <span className="block text-[11px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/60">
-                    Alert Dispatch
-                  </span>
-                  <span className="text-sm font-semibold text-ink dark:text-sand-50 font-mono">
-                    Email & SMS
-                  </span>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+      const { data: profileData, error: profileError } =
+        await supabase
+          .from("industry_profiles")
+          .select(
+            `
+              id,
+              user_id,
+              company_name,
+              industry_type,
+              facility_name,
+              onboarding_status,
+              rejection_reason
+            `
+          )
+          .eq("user_id", user.id)
+          .single();
 
-          {/* Verification Workflow Steps — "What Happens Next?" */}
-          <motion.div
-            variants={cardVariants}
-            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft"
-          >
-            <div className="flex items-center gap-3 mb-6 pb-4 border-b border-ocean-900/5 dark:border-sand-100/5">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ocean-900/10 text-ocean-900 dark:bg-mangrove-500/20 dark:text-mangrove-300 shrink-0">
-                <FileSearch size={22} />
-              </div>
-              <div>
-                <h3 className="font-display text-xl sm:text-2xl font-medium text-ink dark:text-sand-50">
-                  Enterprise Audit Workflow
-                </h3>
-                <p className="text-xs sm:text-sm text-ink-soft dark:text-sand-100/70">
-                  Next steps in validating your corporate account for carbon offset trading and ESG retirement.
-                </p>
-              </div>
-            </div>
+      if (profileError) {
+        console.error(profileError);
 
-            {/* Steps Checklist */}
-            <ul className="space-y-4 text-sm text-ink dark:text-sand-100">
-              <li className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-mangrove-500/20 text-mangrove-700 dark:text-mangrove-300 shrink-0">
-                  <CheckCircle2 size={16} />
-                </div>
-                <span className="leading-relaxed">
-                  <strong className="font-medium text-ink dark:text-sand-50">Entity Registration & Tax Validation:</strong> Automatic cross-referencing of your corporate registration number and GST filings with national business registries.
-                </span>
-              </li>
+        setError(
+          "Unable to load your industry verification details."
+        );
 
-              <li className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-mangrove-500/20 text-mangrove-700 dark:text-mangrove-300 shrink-0">
-                  <CheckCircle2 size={16} />
-                </div>
-                <span className="leading-relaxed">
-                  <strong className="font-medium text-ink dark:text-sand-50">Environmental Regulatory Review:</strong> Pollution Control Board permits and environmental clearance permits are verified for regulatory compliance.
-                </span>
-              </li>
+        return;
+      }
 
-              <li className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-mangrove-500/20 text-mangrove-700 dark:text-mangrove-300 shrink-0">
-                  <CheckCircle2 size={16} />
-                </div>
-                <span className="leading-relaxed">
-                  <strong className="font-medium text-ink dark:text-sand-50">Carbon Audit Authentication:</strong> Submitted third-party carbon audit reports are verified for standard ISO 14064 alignment and greenhouse gas accounting criteria.
-                </span>
-              </li>
+      const industryProfile =
+        profileData as IndustryProfile;
 
-              <li className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-mangrove-500/20 text-mangrove-700 dark:text-mangrove-300 shrink-0">
-                  <CheckCircle2 size={16} />
-                </div>
-                <span className="leading-relaxed">
-                  <strong className="font-medium text-ink dark:text-sand-50">Account Activation & Marketplace Access:</strong> Upon approval, your organization will unlock verified carbon credit purchasing, ESG retirement certificate issuance, and automated API reporting tools.
-                </span>
-              </li>
-            </ul>
-          </motion.div>
+      setProfile(industryProfile);
 
-          {/* Additional Info / Security Guarantee Note */}
-          <motion.div
-            variants={cardVariants}
-            className="rounded-2xl border border-ocean-900/10 bg-sand-50/50 dark:border-sand-100/10 dark:bg-[#071a20]/40 p-4 flex items-center gap-3"
-          >
-            <Lock size={18} className="text-ocean-900 dark:text-mangrove-300 shrink-0" />
-            <p className="text-xs text-ink-soft dark:text-sand-100/70 leading-relaxed">
-              <strong className="text-ink dark:text-sand-50">Enterprise Data Security:</strong> All uploaded compliance files are encrypted using AES-256 standards and stored in ISO 27001-certified infrastructure.
+      // ==========================================
+      // APPROVED
+      // ==========================================
+
+      if (industryProfile.onboarding_status === "APPROVED") {
+        router.push("/industry/dashboard");
+        return;
+      }
+
+      // ==========================================
+      // LOAD DOCUMENTS
+      // ==========================================
+
+      const { data: documentData, error: documentError } =
+        await supabase
+          .from("industry_documents")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("uploaded_at", {
+            ascending: false,
+          });
+
+      if (documentError) {
+        console.error(documentError);
+
+        setError(
+          "Unable to load your submitted documents."
+        );
+
+        return;
+      }
+
+      setDocuments(
+        (documentData || []) as IndustryDocument[]
+      );
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        "Something went wrong while checking your verification status."
+      );
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // ==========================================
+  // AUTO REFRESH
+  // ==========================================
+
+  useEffect(() => {
+    if (!profile) return;
+
+    if (
+      profile.onboarding_status !==
+      "PENDING_VERIFICATION"
+    ) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      loadVerificationStatus(false);
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [profile?.onboarding_status]);
+
+  // ==========================================
+  // FIX & RESUBMIT
+  // ==========================================
+
+  const handleFixAndResubmit = () => {
+    router.push("/industry/onboarding/documents");
+  };
+
+  // ==========================================
+  // OPEN DOCUMENT
+  // ==========================================
+
+  const openDocument = async (storagePath: string) => {
+    const supabase = getSupabaseClient();
+
+    if (!supabase) {
+      alert("Supabase client could not be initialized.");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.storage
+        .from("industry-documents")
+        .createSignedUrl(storagePath, 300);
+
+      if (error) {
+        console.error(error);
+
+        alert(
+          "Unable to open this document. Please check Storage permissions."
+        );
+
+        return;
+      }
+
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, "_blank");
+      }
+    } catch (err) {
+      console.error(err);
+
+      alert("Unable to open document.");
+    }
+  };
+
+  // ==========================================
+  // REQUIRED DOCUMENT CHECK
+  // ==========================================
+
+  const hasRequiredDocuments = REQUIRED_DOCUMENTS.every(
+    (requiredType) =>
+      documents.some(
+        (document) =>
+          document.document_type === requiredType &&
+          document.status !== "REJECTED"
+      )
+  );
+
+  // ==========================================
+  // LOADING
+  // ==========================================
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100">
+        <Navbar />
+
+        <main className="container mx-auto px-4 pt-32 pb-20 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2
+              size={34}
+              className="animate-spin text-mangrove-600"
+            />
+
+            <p className="text-sm text-ink-soft dark:text-sand-100/60">
+              Checking your verification status...
             </p>
-          </motion.div>
+          </div>
+        </main>
 
-          {/* Bottom Navigation Buttons */}
-          <motion.div
-            variants={cardVariants}
-            className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2"
-          >
+        <Footer />
+      </div>
+    );
+  }
+
+  // ==========================================
+  // ERROR / PROFILE NOT FOUND
+  // ==========================================
+
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col">
+        <Navbar />
+
+        <main className="flex-1 container mx-auto px-4 pt-32 pb-20">
+          <div className="max-w-xl mx-auto rounded-[28px] border border-red-500/20 bg-white/80 dark:bg-[#0a232b]/80 p-8 text-center">
+            <AlertCircle
+              size={40}
+              className="mx-auto mb-4 text-red-500"
+            />
+
+            <h1 className="text-xl font-semibold">
+              Verification Details Not Found
+            </h1>
+
+            <p className="mt-2 text-sm text-ink-soft dark:text-sand-100/60">
+              {error ||
+                "We could not find your industry profile."}
+            </p>
+
             <button
               type="button"
-              onClick={() => router.push("/industry/onboarding/documents")}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-ocean-900/15 bg-white px-6 py-3 text-xs font-medium text-ink shadow-sm hover:bg-sand-50 transition-all dark:border-sand-100/15 dark:bg-[#0a232b] dark:text-sand-100 dark:hover:bg-[#071a20]"
+              onClick={() =>
+                router.push("/industry/onboarding")
+              }
+              className="mt-6 inline-flex items-center gap-2 rounded-xl bg-ocean-900 px-5 py-3 text-sm font-semibold text-sand-50"
             >
               <ArrowLeft size={16} />
-              <span>Back to Documents</span>
+              Back to Onboarding
             </button>
+          </div>
+        </main>
 
+        <Footer />
+      </div>
+    );
+  }
+
+  // ==========================================
+  // STATUS HELPERS
+  // ==========================================
+
+  const isPending =
+    profile.onboarding_status ===
+    "PENDING_VERIFICATION";
+
+  const isRejected =
+    profile.onboarding_status === "REJECTED";
+
+  const rejectedDocuments = documents.filter(
+    (document) => document.status === "REJECTED"
+  );
+
+  const approvedDocuments = documents.filter(
+    (document) => document.status === "APPROVED"
+  );
+
+  const pendingDocuments = documents.filter(
+    (document) => document.status === "PENDING"
+  );
+
+  // ==========================================
+  // MAIN UI
+  // ==========================================
+
+  return (
+    <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col">
+      <Navbar />
+
+      <main className="relative flex-1 container mx-auto px-4 sm:px-6 lg:px-8 pt-28 sm:pt-36 pb-16 max-w-6xl">
+        {/* Ambient Background */}
+        <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[1000px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl" />
+
+        <div className="relative z-10 space-y-8">
+          {/* ==========================================
+              HEADER
+          ========================================== */}
+
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col sm:flex-row sm:items-center justify-between gap-5"
+          >
+            <div>
+              <button
+                type="button"
+                onClick={() =>
+                  router.push("/industry/onboarding")
+                }
+                className="inline-flex items-center gap-2 text-xs font-mono text-ink-soft dark:text-sand-100/60 hover:text-ink dark:hover:text-sand-50 transition-colors mb-4"
+              >
+                <ArrowLeft size={14} />
+                Back to Onboarding
+              </button>
+
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-ocean-900/10 dark:bg-sand-100/10">
+                  <ShieldCheck
+                    size={25}
+                    className="text-ocean-900 dark:text-sand-50"
+                  />
+                </div>
+
+                <div>
+                  <h1 className="text-2xl sm:text-3xl font-display font-semibold tracking-tight">
+                    Industry Verification
+                  </h1>
+
+                  <p className="text-sm text-ink-soft dark:text-sand-100/60 mt-1">
+                    Your company documents are being reviewed by
+                    the Authority.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Refresh */}
             <button
               type="button"
-              onClick={() => router.push("/industry/dashboard")}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-ocean-900 hover:bg-ocean-800 dark:bg-mangrove-500 dark:hover:bg-mangrove-400 dark:text-ink px-8 py-3 text-sm font-semibold text-sand-50 shadow-md transition-all focus:outline-none"
+              disabled={refreshing}
+              onClick={() =>
+                loadVerificationStatus(true)
+              }
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-ocean-900/10 dark:border-sand-100/10 bg-white/70 dark:bg-[#0a232b] px-4 py-2.5 text-xs font-semibold hover:bg-sand-100 dark:hover:bg-[#102d35] transition-colors disabled:opacity-50"
             >
-              <LayoutDashboard size={16} />
-              <span>Go to Enterprise Dashboard</span>
-              <ArrowRight size={16} />
+              <RefreshCw
+                size={14}
+                className={
+                  refreshing ? "animate-spin" : ""
+                }
+              />
+
+              Refresh Status
             </button>
           </motion.div>
-        </motion.div>
+
+          {/* ==========================================
+              ERROR
+          ========================================== */}
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 flex items-center gap-3 text-sm text-red-700 dark:text-red-300"
+            >
+              <AlertCircle size={18} />
+
+              <span>{error}</span>
+            </motion.div>
+          )}
+
+          {/* ==========================================
+              COMPANY SUMMARY
+          ========================================== */}
+
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft"
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-mangrove-500/15">
+                <ShieldCheck
+                  size={23}
+                  className="text-mangrove-700 dark:text-mangrove-300"
+                />
+              </div>
+
+              <div className="min-w-0">
+                <h2 className="text-xl font-display font-semibold">
+                  {profile.company_name ||
+                    "Industry Company"}
+                </h2>
+
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                  {profile.industry_type && (
+                    <p className="text-xs text-ink-soft dark:text-sand-100/60">
+                      Industry: {profile.industry_type}
+                    </p>
+                  )}
+
+                  {profile.facility_name && (
+                    <p className="text-xs text-ink-soft dark:text-sand-100/60">
+                      Facility: {profile.facility_name}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </motion.section>
+
+          {/* ==========================================
+              PENDING VERIFICATION
+          ========================================== */}
+
+          {isPending && (
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-[28px] border border-amber-500/20 bg-amber-500/5 p-6 sm:p-8"
+            >
+              <div className="flex flex-col sm:flex-row items-start gap-5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10">
+                  <AlertCircle
+                    size={25}
+                    className="text-amber-600 dark:text-amber-400"
+                  />
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-display font-semibold text-amber-800 dark:text-amber-300">
+                        Verification Pending
+                      </h2>
+
+                      <p className="text-sm text-amber-700/80 dark:text-amber-300/70 mt-1">
+                        Your application has been submitted
+                        successfully and is currently being reviewed
+                        by the Authority.
+                      </p>
+                    </div>
+
+                    <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-[10px] font-mono text-amber-700 dark:text-amber-300 shrink-0">
+                      <Loader2
+                        size={12}
+                        className="animate-spin"
+                      />
+                      UNDER REVIEW
+                    </span>
+                  </div>
+
+                  <div className="mt-5 rounded-2xl bg-white/50 dark:bg-[#071a20]/50 border border-amber-500/10 p-4">
+                    <p className="text-xs text-amber-800/80 dark:text-amber-200/70">
+                      This page automatically checks for updates.
+                      You can also click <strong>Refresh Status</strong>{" "}
+                      above to check manually.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* ==========================================
+              REJECTED
+          ========================================== */}
+
+          {isRejected && (
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="rounded-[28px] border border-red-500/20 bg-red-500/5 p-6 sm:p-8"
+            >
+              <div className="flex flex-col sm:flex-row items-start gap-5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-red-500/10">
+                  <XCircle
+                    size={25}
+                    className="text-red-600 dark:text-red-400"
+                  />
+                </div>
+
+                <div className="flex-1">
+                  <h2 className="text-xl font-display font-semibold text-red-800 dark:text-red-300">
+                    Application Rejected
+                  </h2>
+
+                  <p className="text-sm text-red-700/80 dark:text-red-300/70 mt-1">
+                    The Authority has reviewed your application
+                    and requested corrections.
+                  </p>
+
+                  {/* Profile-level rejection reason */}
+                  {profile.rejection_reason && (
+                    <div className="mt-5 rounded-2xl border border-red-500/15 bg-red-500/10 p-4">
+                      <p className="text-[11px] font-mono uppercase tracking-wider font-semibold text-red-700 dark:text-red-300">
+                        Authority Rejection Reason
+                      </p>
+
+                      <p className="mt-2 text-sm text-red-800/90 dark:text-red-200/90">
+                        {profile.rejection_reason}
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      onClick={handleFixAndResubmit}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 text-white px-6 py-3 text-sm font-semibold transition-colors"
+                    >
+                      <RefreshCw size={17} />
+                      Fix & Resubmit
+                    </button>
+                  </div>
+
+                  <p className="mt-3 text-[11px] text-red-700/60 dark:text-red-300/50">
+                    You will be taken to the document upload page
+                    where you can upload corrected documents.
+                  </p>
+                </div>
+              </div>
+            </motion.section>
+          )}
+
+          {/* ==========================================
+              DOCUMENT SUMMARY
+          ========================================== */}
+
+          <motion.section
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-ocean-900/5 dark:border-sand-100/5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-mangrove-500/15">
+                  <FileText
+                    size={20}
+                    className="text-mangrove-700 dark:text-mangrove-300"
+                  />
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-display font-semibold">
+                    Document Verification
+                  </h2>
+
+                  <p className="text-xs text-ink-soft dark:text-sand-100/60">
+                    Status of your submitted compliance documents
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <span className="text-[10px] font-mono px-2.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                  {approvedDocuments.length} Approved
+                </span>
+
+                <span className="text-[10px] font-mono px-2.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/15 text-amber-700 dark:text-amber-300">
+                  {pendingDocuments.length} Pending
+                </span>
+
+                <span className="text-[10px] font-mono px-2.5 py-1.5 rounded-full bg-red-500/10 border border-red-500/15 text-red-700 dark:text-red-300">
+                  {rejectedDocuments.length} Rejected
+                </span>
+              </div>
+            </div>
+
+            {/* Required document warning */}
+            {!hasRequiredDocuments && (
+              <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 flex items-start gap-3">
+                <AlertCircle
+                  size={18}
+                  className="shrink-0 text-amber-600 dark:text-amber-400"
+                />
+
+                <div>
+                  <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                    Some required documents are missing or rejected.
+                  </p>
+
+                  <p className="text-xs text-amber-700/70 dark:text-amber-300/60 mt-1">
+                    If your application was rejected, use the
+                    Fix & Resubmit button to upload corrected
+                    documents.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {documents.length === 0 ? (
+              <div className="py-12 text-center">
+                <FileText
+                  size={38}
+                  className="mx-auto mb-3 text-ink-faint dark:text-sand-100/30"
+                />
+
+                <p className="text-sm font-medium">
+                  No documents submitted
+                </p>
+
+                <p className="text-xs text-ink-soft dark:text-sand-100/50 mt-1">
+                  No industry compliance documents were found.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                {documents.map((document) => (
+                  <div
+                    key={document.id}
+                    className="rounded-2xl border border-ocean-900/10 dark:border-sand-100/10 bg-sand-50/60 dark:bg-[#071a20]/50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-ocean-900/10 dark:bg-sand-100/10">
+                          <FileText
+                            size={18}
+                            className="text-ocean-900 dark:text-sand-50"
+                          />
+                        </div>
+
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold">
+                            {documentLabels[
+                              document.document_type
+                            ] || document.document_type}
+                          </h3>
+
+                          <p className="text-[11px] text-ink-soft dark:text-sand-100/50 truncate mt-1">
+                            {document.file_name}
+                          </p>
+                        </div>
+                      </div>
+
+                      <DocumentStatus
+                        status={document.status}
+                      />
+                    </div>
+
+                    {/* Rejection reason */}
+                    {document.status === "REJECTED" &&
+                      document.rejection_reason && (
+                        <div className="mt-3 rounded-xl bg-red-500/10 border border-red-500/15 p-3">
+                          <p className="text-[11px] font-medium text-red-700 dark:text-red-300">
+                            Rejection Reason
+                          </p>
+
+                          <p className="text-xs text-red-700/80 dark:text-red-300/80 mt-1">
+                            {document.rejection_reason}
+                          </p>
+                        </div>
+                      )}
+
+                    {/* Reviewed date */}
+                    {document.reviewed_at && (
+                      <p className="mt-3 text-[10px] font-mono text-ink-soft dark:text-sand-100/40">
+                        Reviewed:{" "}
+                        {new Date(
+                          document.reviewed_at
+                        ).toLocaleString()}
+                      </p>
+                    )}
+
+                    {/* Open document */}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openDocument(document.storage_path)
+                      }
+                      className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-xl border border-ocean-900/10 dark:border-sand-100/10 bg-white/70 dark:bg-[#0a232b] px-4 py-2.5 text-xs font-semibold hover:bg-sand-100 dark:hover:bg-[#102d35] transition-colors"
+                    >
+                      <ExternalLink size={14} />
+                      Open Document
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.section>
+
+          {/* ==========================================
+              NEXT STEPS
+          ========================================== */}
+
+          {isPending && (
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft"
+            >
+              <div className="flex items-center gap-3 pb-5 border-b border-ocean-900/5 dark:border-sand-100/5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-ocean-900/10 dark:bg-sand-100/10">
+                  <ShieldCheck
+                    size={20}
+                    className="text-ocean-900 dark:text-sand-50"
+                  />
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-display font-semibold">
+                    What happens next?
+                  </h2>
+
+                  <p className="text-xs text-ink-soft dark:text-sand-100/60">
+                    Your Industry onboarding process
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                <StepCard
+                  number="01"
+                  title="Authority Review"
+                  description="The Authority checks your company details and compliance documents."
+                  active
+                />
+
+                <StepCard
+                  number="02"
+                  title="Application Decision"
+                  description="Your application will be approved or returned for corrections."
+                />
+
+                <StepCard
+                  number="03"
+                  title="Industry Dashboard"
+                  description="After approval, you can access the Industry dashboard and available platform features."
+                />
+              </div>
+            </motion.section>
+          )}
+
+          {/* ==========================================
+              REJECTED NEXT STEP
+          ========================================== */}
+
+          {isRejected && (
+            <motion.section
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft"
+            >
+              <div className="flex items-start gap-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-mangrove-500/15">
+                  <RefreshCw
+                    size={20}
+                    className="text-mangrove-700 dark:text-mangrove-300"
+                  />
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-display font-semibold">
+                    Correct and Resubmit
+                  </h2>
+
+                  <p className="text-sm text-ink-soft dark:text-sand-100/60 mt-1">
+                    Review the Authority's rejection reason, replace
+                    the required documents if necessary, and submit
+                    your application again for verification.
+                  </p>
+                </div>
+              </div>
+            </motion.section>
+          )}
+        </div>
       </main>
+
+      <Footer />
+    </div>
+  );
+}
+
+// ==========================================
+// DOCUMENT STATUS
+// ==========================================
+
+function DocumentStatus({
+  status,
+}: {
+  status: "PENDING" | "APPROVED" | "REJECTED";
+}) {
+  if (status === "APPROVED") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-mono text-emerald-700 dark:text-emerald-300 shrink-0">
+        <CheckCircle2 size={11} />
+        APPROVED
+      </span>
+    );
+  }
+
+  if (status === "REJECTED") {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-[10px] font-mono text-red-700 dark:text-red-300 shrink-0">
+        <XCircle size={11} />
+        REJECTED
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-mono text-amber-700 dark:text-amber-300 shrink-0">
+      <AlertCircle size={11} />
+      PENDING
+    </span>
+  );
+}
+
+// ==========================================
+// STEP CARD
+// ==========================================
+
+function StepCard({
+  number,
+  title,
+  description,
+  active = false,
+}: {
+  number: string;
+  title: string;
+  description: string;
+  active?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-5 ${
+        active
+          ? "border-ocean-900/15 dark:border-sand-100/10 bg-ocean-900/5 dark:bg-sand-100/5"
+          : "border-ocean-900/5 dark:border-sand-100/5 bg-sand-50/60 dark:bg-[#071a20]/50"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <span className="text-[10px] font-mono text-ink-soft dark:text-sand-100/40">
+          {number}
+        </span>
+
+        <h3 className="text-sm font-semibold">
+          {title}
+        </h3>
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-ink-soft dark:text-sand-100/55">
+        {description}
+      </p>
     </div>
   );
 }
