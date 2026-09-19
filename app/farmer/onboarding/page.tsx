@@ -1,20 +1,21 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { 
   CheckCircle2, 
-  Circle, 
   Lock, 
   ArrowRight, 
   Leaf, 
   ShieldCheck, 
   FileText, 
   LayoutDashboard,
-  UserCheck
+  UserCheck,
+  Loader2
 } from "lucide-react";
 
+import { createClient } from "@/lib/supabase";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 interface StepItem {
@@ -31,7 +32,6 @@ const STEPS: StepItem[] = [
   { id: 5, label: "Dashboard", icon: LayoutDashboard },
 ];
 
-// Animation variants
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -54,18 +54,88 @@ const cardVariants = {
 
 export default function FarmerOnboardingPage() {
   const router = useRouter();
-  const [currentStep] = useState<number>(2);
+  const supabase = createClient();
 
-  const handleProceedToProfile = () => {
-    router.push("/farmer/onboarding/profile");
+  const [loading, setLoading] = useState<boolean>(true);
+  const [currentStep, setCurrentStep] = useState<number>(2);
+
+  useEffect(() => {
+    async function checkStatus() {
+      try {
+        setLoading(true);
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+
+        if (!session) {
+          router.replace("/login");
+          return;
+        }
+
+        const { data: profile } = await supabase
+          .from("farmer_profiles")
+          .select("onboarding_status")
+          .eq("user_id", session.user.id)
+          .single();
+
+        if (profile) {
+          switch (profile.onboarding_status) {
+            case "NOT_STARTED":
+              setCurrentStep(2);
+              break;
+            case "PENDING_DOCUMENTS":
+              setCurrentStep(3);
+              break;
+            case "PENDING_VERIFICATION":
+              setCurrentStep(4);
+              break;
+            case "APPROVED":
+              setCurrentStep(5);
+              router.replace("/farmer/dashboard");
+              return;
+            default:
+              setCurrentStep(2);
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching onboarding status:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    checkStatus();
+  }, [router, supabase]);
+
+  const handleNextStep = () => {
+    if (currentStep === 2) {
+      router.push("/farmer/onboarding/profile");
+    } else if (currentStep === 3) {
+      router.push("/farmer/onboarding/documents");
+    } else if (currentStep === 4) {
+      router.push("/farmer/onboarding/verification");
+    } else if (currentStep === 5) {
+      router.push("/farmer/dashboard");
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-sand-100 dark:bg-[#061418] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-mangrove-600 dark:text-mangrove-400" />
+          <p className="text-xs font-mono text-ink-soft dark:text-sand-100/70">
+            Checking onboarding status...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
-      {/* Background ambient subtle glow */}
       <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[900px] rounded-full bg-gradient-to-b from-ocean-300/15 via-mangrove-300/10 to-transparent blur-3xl opacity-70 dark:from-ocean-900/30 dark:via-mangrove-900/20" />
 
-      {/* Top Header Bar */}
       <header className="relative z-10 container mx-auto px-6 h-20 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ocean-900 text-mangrove-300 shadow-card dark:bg-mangrove-500 dark:text-ink">
@@ -81,9 +151,7 @@ export default function FarmerOnboardingPage() {
         </div>
       </header>
 
-      {/* Main Container */}
       <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 py-8 max-w-5xl">
-        {/* Animated Title Header */}
         <motion.div
           initial={{ opacity: 0, y: -15 }}
           animate={{ opacity: 1, y: 0 }}
@@ -101,7 +169,6 @@ export default function FarmerOnboardingPage() {
           </p>
         </motion.div>
 
-        {/* Premium Progress Stepper */}
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -109,7 +176,6 @@ export default function FarmerOnboardingPage() {
           className="my-10 p-6 rounded-[24px] border border-ocean-900/10 bg-white/60 dark:border-sand-100/10 dark:bg-[#0a232b]/60 backdrop-blur-md shadow-soft"
         >
           <div className="flex items-center justify-between relative">
-            {/* Connecting Progress Bar */}
             <div className="absolute top-5 left-6 right-6 h-[2px] bg-sand-200 dark:bg-sand-100/10 -z-0">
               <div
                 className="h-full bg-gradient-to-r from-mangrove-500 to-ocean-500 transition-all duration-500"
@@ -161,14 +227,12 @@ export default function FarmerOnboardingPage() {
           </div>
         </motion.div>
 
-        {/* Step Cards Grid */}
         <motion.div
           variants={containerVariants}
           initial="hidden"
           animate="visible"
           className="grid grid-cols-1 md:grid-cols-2 gap-6"
         >
-          {/* Step 1: Account Created */}
           <motion.div variants={cardVariants}>
             <div className="rounded-[24px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft flex flex-col justify-between h-full">
               <div>
@@ -196,21 +260,42 @@ export default function FarmerOnboardingPage() {
             </div>
           </motion.div>
 
-          {/* Step 2: Complete Farmer Profile (CURRENT ACTIVE STEP) */}
           <motion.div
             variants={cardVariants}
-            whileHover={{ y: -4, transition: { duration: 0.2 } }}
+            whileHover={currentStep === 2 ? { y: -4, transition: { duration: 0.2 } } : {}}
           >
-            <div className="rounded-[24px] border-2 border-mangrove-500/40 bg-white dark:border-mangrove-400/30 dark:bg-[#0a232b] backdrop-blur-md p-6 sm:p-8 shadow-card flex flex-col justify-between h-full relative overflow-hidden">
-              <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-mangrove-500/10 blur-2xl" />
+            <div
+              className={`rounded-[24px] p-6 sm:p-8 shadow-card flex flex-col justify-between h-full relative overflow-hidden backdrop-blur-md transition-all ${
+                currentStep === 2
+                  ? "border-2 border-mangrove-500/40 bg-white dark:border-mangrove-400/30 dark:bg-[#0a232b]"
+                  : currentStep > 2
+                  ? "border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80"
+                  : "border border-ocean-900/10 bg-white/40 dark:border-sand-100/10 dark:bg-[#0a232b]/40 opacity-70"
+              }`}
+            >
+              {currentStep === 2 && (
+                <div className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-mangrove-500/10 blur-2xl" />
+              )}
 
               <div>
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink mb-4 font-medium">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mangrove-300 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-mangrove-400" />
-                  </span>
-                  <span>Current Step</span>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono mb-4 font-medium">
+                  {currentStep > 2 ? (
+                    <span className="bg-mangrove-500/15 text-mangrove-800 dark:text-mangrove-300 px-3 py-1 rounded-full flex items-center gap-1">
+                      <CheckCircle2 size={14} /> Completed
+                    </span>
+                  ) : currentStep === 2 ? (
+                    <span className="bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink px-3 py-1 rounded-full flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mangrove-300 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-mangrove-400" />
+                      </span>
+                      Current Step
+                    </span>
+                  ) : (
+                    <span className="bg-sand-200/60 dark:bg-sand-100/10 text-ink-faint dark:text-sand-100/50 px-3 py-1 rounded-full flex items-center gap-1">
+                      <Lock size={12} /> Locked
+                    </span>
+                  )}
                 </div>
                 <h3 className="font-display text-xl font-medium text-ink dark:text-sand-50">
                   Complete Farmer Profile
@@ -221,77 +306,152 @@ export default function FarmerOnboardingPage() {
               </div>
 
               <div className="mt-6 pt-4 border-t border-ocean-900/5 dark:border-sand-100/5">
-                <button
-                  type="button"
-                  onClick={handleProceedToProfile}
-                  className="w-full flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-6 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
-                >
-                  <span>Complete Profile</span>
-                  <ArrowRight size={16} />
-                </button>
+                {currentStep === 2 ? (
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="w-full flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-6 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
+                  >
+                    <span>Complete Profile</span>
+                    <ArrowRight size={16} />
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="w-full flex items-center justify-center gap-2 rounded-full bg-sand-200/50 dark:bg-sand-100/5 px-5 py-3 text-sm font-medium text-ink-faint dark:text-sand-100/40 cursor-default"
+                  >
+                    {currentStep > 2 ? <CheckCircle2 size={16} /> : <Lock size={14} />}
+                    <span>{currentStep > 2 ? "Completed" : "Locked"}</span>
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
 
-          {/* Step 3: Upload Land Documents */}
-          <motion.div variants={cardVariants}>
-            <div className="rounded-[24px] border border-ocean-900/10 bg-white/40 dark:border-sand-100/10 dark:bg-[#0a232b]/40 backdrop-blur-md p-6 sm:p-8 shadow-soft flex flex-col justify-between h-full opacity-70">
+          <motion.div
+            variants={cardVariants}
+            whileHover={currentStep === 3 ? { y: -4, transition: { duration: 0.2 } } : {}}
+          >
+            <div
+              className={`rounded-[24px] p-6 sm:p-8 shadow-card flex flex-col justify-between h-full relative overflow-hidden backdrop-blur-md transition-all ${
+                currentStep === 3
+                  ? "border-2 border-mangrove-500/40 bg-white dark:border-mangrove-400/30 dark:bg-[#0a232b]"
+                  : currentStep > 3
+                  ? "border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80"
+                  : "border border-ocean-900/10 bg-white/40 dark:border-sand-100/10 dark:bg-[#0a232b]/40 opacity-70"
+              }`}
+            >
               <div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-sand-200/60 dark:bg-sand-100/10 text-ink-faint dark:text-sand-100/50 mb-4">
-                  <Lock size={12} />
-                  <span>Locked</span>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono mb-4 font-medium">
+                  {currentStep > 3 ? (
+                    <span className="bg-mangrove-500/15 text-mangrove-800 dark:text-mangrove-300 px-3 py-1 rounded-full flex items-center gap-1">
+                      <CheckCircle2 size={14} /> Completed
+                    </span>
+                  ) : currentStep === 3 ? (
+                    <span className="bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink px-3 py-1 rounded-full flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mangrove-300 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-mangrove-400" />
+                      </span>
+                      Current Step
+                    </span>
+                  ) : (
+                    <span className="bg-sand-200/60 dark:bg-sand-100/10 text-ink-faint dark:text-sand-100/50 px-3 py-1 rounded-full flex items-center gap-1">
+                      <Lock size={12} /> Locked
+                    </span>
+                  )}
                 </div>
-                <h3 className="font-display text-xl font-medium text-ink/70 dark:text-sand-50/70">
+                <h3 className="font-display text-xl font-medium text-ink dark:text-sand-50">
                   Upload Land Documents
                 </h3>
-                <p className="mt-2 text-sm text-ink-faint dark:text-sand-100/50 leading-relaxed">
+                <p className="mt-2 text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
                   Upload title deeds, satellite survey boundaries, and conservation rights.
                 </p>
               </div>
 
               <div className="mt-6 pt-4 border-t border-ocean-900/5 dark:border-sand-100/5">
-                <button
-                  disabled
-                  className="w-full flex items-center justify-center gap-2 rounded-full bg-sand-200/50 dark:bg-sand-100/5 px-5 py-3 text-sm font-medium text-ink-faint dark:text-sand-100/40 cursor-not-allowed"
-                >
-                  <Lock size={14} />
-                  <span>Locked</span>
-                </button>
+                {currentStep === 3 ? (
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="w-full flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-6 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
+                  >
+                    <span>Upload Documents</span>
+                    <ArrowRight size={16} />
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="w-full flex items-center justify-center gap-2 rounded-full bg-sand-200/50 dark:bg-sand-100/5 px-5 py-3 text-sm font-medium text-ink-faint dark:text-sand-100/40 cursor-default"
+                  >
+                    {currentStep > 3 ? <CheckCircle2 size={16} /> : <Lock size={14} />}
+                    <span>{currentStep > 3 ? "Completed" : "Locked"}</span>
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
 
-          {/* Step 4: Verification */}
-          <motion.div variants={cardVariants}>
-            <div className="rounded-[24px] border border-ocean-900/10 bg-white/40 dark:border-sand-100/10 dark:bg-[#0a232b]/40 backdrop-blur-md p-6 sm:p-8 shadow-soft flex flex-col justify-between h-full opacity-70">
+          <motion.div
+            variants={cardVariants}
+            whileHover={currentStep === 4 ? { y: -4, transition: { duration: 0.2 } } : {}}
+          >
+            <div
+              className={`rounded-[24px] p-6 sm:p-8 shadow-card flex flex-col justify-between h-full relative overflow-hidden backdrop-blur-md transition-all ${
+                currentStep === 4
+                  ? "border-2 border-mangrove-500/40 bg-white dark:border-mangrove-400/30 dark:bg-[#0a232b]"
+                  : "border border-ocean-900/10 bg-white/40 dark:border-sand-100/10 dark:bg-[#0a232b]/40 opacity-70"
+              }`}
+            >
               <div>
-                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-sand-200/60 dark:bg-sand-100/10 text-ink-faint dark:text-sand-100/50 mb-4">
-                  <Lock size={12} />
-                  <span>Locked</span>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono mb-4 font-medium">
+                  {currentStep === 4 ? (
+                    <span className="bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink px-3 py-1 rounded-full flex items-center gap-1.5">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mangrove-300 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-mangrove-400" />
+                      </span>
+                      Current Step
+                    </span>
+                  ) : (
+                    <span className="bg-sand-200/60 dark:bg-sand-100/10 text-ink-faint dark:text-sand-100/50 px-3 py-1 rounded-full flex items-center gap-1">
+                      <Lock size={12} /> Locked
+                    </span>
+                  )}
                 </div>
-                <h3 className="font-display text-xl font-medium text-ink/70 dark:text-sand-50/70">
+                <h3 className="font-display text-xl font-medium text-ink dark:text-sand-50">
                   MRV Verification
                 </h3>
-                <p className="mt-2 text-sm text-ink-faint dark:text-sand-100/50 leading-relaxed">
+                <p className="mt-2 text-sm text-ink-soft dark:text-sand-100/70 leading-relaxed">
                   Automated satellite & drone telemetry verification of mangrove biomass.
                 </p>
               </div>
 
               <div className="mt-6 pt-4 border-t border-ocean-900/5 dark:border-sand-100/5">
-                <button
-                  disabled
-                  className="w-full flex items-center justify-center gap-2 rounded-full bg-sand-200/50 dark:bg-sand-100/5 px-5 py-3 text-sm font-medium text-ink-faint dark:text-sand-100/40 cursor-not-allowed"
-                >
-                  <Lock size={14} />
-                  <span>Locked</span>
-                </button>
+                {currentStep === 4 ? (
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="w-full flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-6 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
+                  >
+                    <span>Check Verification Status</span>
+                    <ArrowRight size={16} />
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="w-full flex items-center justify-center gap-2 rounded-full bg-sand-200/50 dark:bg-sand-100/5 px-5 py-3 text-sm font-medium text-ink-faint dark:text-sand-100/40 cursor-default"
+                  >
+                    <Lock size={14} />
+                    <span>Locked</span>
+                  </button>
+                )}
               </div>
             </div>
           </motion.div>
         </motion.div>
       </main>
 
-      {/* Footer Branding */}
       <footer className="relative z-10 container mx-auto px-6 py-6 text-center text-xs font-mono text-ink-faint dark:text-sand-100/40">
         © {new Date().getFullYear()} BlueCarbon Nexus. Verified Blockchain MRV Registry.
       </footer>

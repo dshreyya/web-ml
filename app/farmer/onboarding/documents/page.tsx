@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -14,10 +14,11 @@ import {
   ArrowRight,
   Leaf,
   CheckCircle2,
-  File,
   X,
+  Loader2,
 } from "lucide-react";
 
+import { createClient } from "@/lib/supabase";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { ProgressBar } from "@/components/farmer/ProgressBar";
@@ -52,6 +53,12 @@ interface UploadState {
 
 export default function FarmerDocumentsPage() {
   const router = useRouter();
+  const supabase = createClient();
+
+  const [loading, setLoading] = useState<boolean>(true);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string>("");
+  const [farmerProfileId, setFarmerProfileId] = useState<string | null>(null);
 
   // Local UI state for document selection preview
   const [uploads, setUploads] = useState<UploadState>({
@@ -60,6 +67,42 @@ export default function FarmerDocumentsPage() {
     projectImages: null,
     geolocationProof: null,
   });
+
+  // Check auth session & load profile ID
+  useEffect(() => {
+    async function initSession() {
+      try {
+        setLoading(true);
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (error || !session) {
+          router.replace("/login");
+          return;
+        }
+
+        setUserId(session.user.id);
+
+        const { data: profile } = await supabase
+          .from("farmer_profiles")
+          .select("id, onboarding_status")
+          .eq("user_id", session.user.id)
+          .single();
+
+        if (profile) {
+          setFarmerProfileId(profile.id);
+        }
+      } catch (err) {
+        console.error("Error initializing document setup:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    initSession();
+  }, [router, supabase]);
 
   const handleFileChange = (
     key: keyof UploadState,
@@ -78,10 +121,119 @@ export default function FarmerDocumentsPage() {
     setUploads((prev) => ({ ...prev, [key]: null }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    router.push("/farmer/onboarding/verification");
+    if (!userId) return;
+
+    try {
+      setSubmitting(true);
+
+      // Prepare list of document metadata entries to save
+      const docEntries: Array<{
+        user_id: string;
+        farmer_profile_id: string | null;
+        document_type: string;
+        document_url: string;
+        document_name: string;
+        status: string;
+      }> = [];
+
+      if (uploads.idCard) {
+        docEntries.push({
+          user_id: userId,
+          farmer_profile_id: farmerProfileId,
+          document_type: "GOVERNMENT_ID",
+          document_url: `/uploads/${userId}/id_card_${uploads.idCard.name}`,
+          document_name: uploads.idCard.name,
+          status: "PENDING_VERIFICATION",
+        });
+      }
+
+      if (uploads.landOwnership) {
+        docEntries.push({
+          user_id: userId,
+          farmer_profile_id: farmerProfileId,
+          document_type: "LAND_OWNERSHIP",
+          document_url: `/uploads/${userId}/land_${uploads.landOwnership.name}`,
+          document_name: uploads.landOwnership.name,
+          status: "PENDING_VERIFICATION",
+        });
+      }
+
+      if (uploads.geolocationProof) {
+        docEntries.push({
+          user_id: userId,
+          farmer_profile_id: farmerProfileId,
+          document_type: "GEOLOCATION_MAP",
+          document_url: `/uploads/${userId}/geo_${uploads.geolocationProof.name}`,
+          document_name: uploads.geolocationProof.name,
+          status: "PENDING_VERIFICATION",
+        });
+      }
+
+      if (uploads.projectImages && uploads.projectImages.length > 0) {
+        Array.from(uploads.projectImages).forEach((file, idx) => {
+          docEntries.push({
+            user_id: userId,
+            farmer_profile_id: farmerProfileId,
+            document_type: "PROJECT_IMAGE",
+            document_url: `/uploads/${userId}/img_${idx}_${file.name}`,
+            document_name: file.name,
+            status: "PENDING_VERIFICATION",
+          });
+        });
+      }
+
+      // 1. Insert document entries into farmer_documents table if any were selected
+      if (docEntries.length > 0) {
+        const { error: docError } = await supabase
+          .from("farmer_documents")
+          .insert(docEntries);
+
+        if (docError) {
+          console.error("Error inserting farmer documents:", docError);
+        }
+      }
+
+      // 2. Update onboarding_status to PENDING_VERIFICATION in farmer_profiles
+      const { error: profileError } = await supabase
+        .from("farmer_profiles")
+        .upsert(
+          {
+            user_id: userId,
+            onboarding_status: "PENDING_VERIFICATION",
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+
+      if (profileError) {
+        console.error("Error updating profile status:", profileError);
+        alert("Failed to update onboarding status. Please try again.");
+        return;
+      }
+
+      // 3. Advance to verification step
+      router.push("/farmer/onboarding/verification");
+    } catch (err) {
+      console.error("Document submit error:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-sand-100 dark:bg-[#061418] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-mangrove-600 dark:text-mangrove-400" />
+          <p className="text-xs font-mono text-ink-soft dark:text-sand-100/70">
+            Initializing document portal...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
@@ -92,7 +244,7 @@ export default function FarmerDocumentsPage() {
       <Navbar />
 
       {/* Main Content Area */}
-      <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-5xl">
+      <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-5xl pt-24 sm:pt-28">
         {/* Header Section */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -444,7 +596,7 @@ export default function FarmerDocumentsPage() {
             className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4"
           >
             <Link
-              href="/farmer/profile"
+              href="/farmer/onboarding/profile"
               className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full border border-ocean-900/15 bg-white px-6 py-3.5 text-sm font-medium text-ink shadow-sm hover:bg-sand-50 transition-all dark:border-sand-100/15 dark:bg-[#0a232b] dark:text-sand-100 dark:hover:bg-[#071a20]"
             >
               <ArrowLeft size={16} />
@@ -453,10 +605,20 @@ export default function FarmerDocumentsPage() {
 
             <button
               type="submit"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-8 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
+              disabled={submitting}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-8 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500 disabled:opacity-50"
             >
-              <span>Submit Documents</span>
-              <ArrowRight size={16} />
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Submitting Documents...</span>
+                </>
+              ) : (
+                <>
+                  <span>Submit Documents</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
             </button>
           </motion.div>
         </motion.form>

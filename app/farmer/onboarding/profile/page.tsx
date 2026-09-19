@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
@@ -19,8 +19,10 @@ import {
   Leaf,
   Globe2,
   Map,
+  Loader2,
 } from "lucide-react";
 
+import { createClient } from "@/lib/supabase";
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { ProgressBar } from "@/components/farmer/ProgressBar";
@@ -48,15 +50,78 @@ const cardVariants = {
 
 export default function FarmerProfilePage() {
   const router = useRouter();
+  const supabase = createClient();
 
-  // State management for geolocation
+  // Page Loading & User state
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [userId, setUserId] = useState("");
+
+  // Form Fields State
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [village, setVillage] = useState("");
+  const [district, setDistrict] = useState("");
+  const [stateName, setStateName] = useState("");
+  const [farmName, setFarmName] = useState("");
+  const [landArea, setLandArea] = useState("");
+  const [unit, setUnit] = useState("acres");
+  const [description, setDescription] = useState("");
+
+  // Geolocation
   const [lat, setLat] = useState<string>("");
   const [lng, setLng] = useState<string>("");
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [locationCaptured, setLocationCaptured] = useState<boolean>(false);
 
-  // State management for image upload preview
+  // Photo upload preview
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  // 1. Fetch current session & existing profile details
+  useEffect(() => {
+    async function loadFarmerProfile() {
+      try {
+        setLoading(true);
+        const {
+          data: { session },
+          error: sessionError,
+        } = await supabase.auth.getSession();
+
+        if (sessionError || !session) {
+          router.replace("/login");
+          return;
+        }
+
+        setUserId(session.user.id);
+        setUserEmail(session.user.email || "");
+
+        // Fetch existing farmer profile row if present
+        const { data: profile } = await supabase
+          .from("farmer_profiles")
+          .select("*")
+          .eq("user_id", session.user.id)
+          .single();
+
+        if (profile) {
+          if (profile.full_name) setFullName(profile.full_name);
+          if (profile.phone) setPhone(profile.phone);
+          if (profile.location) {
+            const locParts = profile.location.split(",");
+            if (locParts[0]) setVillage(locParts[0].trim());
+            if (locParts[1]) setDistrict(locParts[1].trim());
+            if (locParts[2]) setStateName(locParts[2].trim());
+          }
+        }
+      } catch (err) {
+        console.error("Error loading farmer profile:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadFarmerProfile();
+  }, [router, supabase]);
 
   const handleGetCurrentLocation = () => {
     setIsLocating(true);
@@ -69,7 +134,6 @@ export default function FarmerProfilePage() {
           setLocationCaptured(true);
         },
         () => {
-          // Fallback demo coordinates
           setLat("12.971598");
           setLng("77.594566");
           setIsLocating(false);
@@ -92,6 +156,59 @@ export default function FarmerProfilePage() {
     }
   };
 
+  // 2. Submit & update farmer profile in Supabase
+  const handleSubmitProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+
+    try {
+      setSaving(true);
+
+      const locationString = [village, district, stateName]
+        .filter(Boolean)
+        .join(", ");
+
+      // Update or insert profile row with PENDING_DOCUMENTS status
+      const { error } = await supabase.from("farmer_profiles").upsert(
+        {
+          user_id: userId,
+          full_name: fullName,
+          phone: phone,
+          location: locationString,
+          onboarding_status: "PENDING_DOCUMENTS",
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+
+      if (error) {
+        console.error("Failed to save profile:", error);
+        alert("Failed to save profile details. Please try again.");
+        return;
+      }
+
+      // Advance to Step 3: Land Documents
+      router.push("/farmer/onboarding/documents");
+    } catch (err) {
+      console.error("Submission error:", err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-sand-100 dark:bg-[#061418] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-8 w-8 animate-spin text-mangrove-600 dark:text-mangrove-400" />
+          <p className="text-xs font-mono text-ink-soft dark:text-sand-100/70">
+            Loading profile information...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
       {/* Background Ambient Glow */}
@@ -101,7 +218,7 @@ export default function FarmerProfilePage() {
       <Navbar />
 
       {/* Main Content Area */}
-      <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-5xl">
+      <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 lg:px-8 py-10 max-w-5xl pt-24 sm:pt-28">
         {/* Hero Section */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -144,15 +261,12 @@ export default function FarmerProfilePage() {
           />
         </motion.div>
 
-        {/* Form Container with Framer Motion Stagger */}
+        {/* Form Container */}
         <motion.form
           variants={containerVariants}
           initial="hidden"
           animate="visible"
-          onSubmit={(e) => {
-            e.preventDefault();
-            router.push("/farmer/onboarding/documents");
-          }}
+          onSubmit={handleSubmitProfile}
           className="space-y-8"
         >
           {/* Card 1 — Personal Information */}
@@ -187,6 +301,8 @@ export default function FarmerProfilePage() {
                   <input
                     type="text"
                     required
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
                     placeholder="e.g. Rajesh Kumar"
                     className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
                   />
@@ -205,7 +321,7 @@ export default function FarmerProfilePage() {
                   <input
                     type="email"
                     readOnly
-                    value="farmer@bluecarbonnexus.org"
+                    value={userEmail || "farmer@bluecarbonnexus.org"}
                     className="w-full rounded-xl border border-ocean-900/10 bg-sand-200/50 dark:bg-[#071a20]/30 pl-10 pr-4 py-3 text-sm text-ink-soft dark:text-sand-100/60 cursor-not-allowed dark:border-sand-100/10"
                   />
                 </div>
@@ -223,6 +339,8 @@ export default function FarmerProfilePage() {
                   <input
                     type="tel"
                     required
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
                     placeholder="+91 98765 43210"
                     className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
                   />
@@ -241,6 +359,8 @@ export default function FarmerProfilePage() {
                   <input
                     type="text"
                     required
+                    value={village}
+                    onChange={(e) => setVillage(e.target.value)}
                     placeholder="e.g. Sunderpur"
                     className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
                   />
@@ -259,6 +379,8 @@ export default function FarmerProfilePage() {
                   <input
                     type="text"
                     required
+                    value={district}
+                    onChange={(e) => setDistrict(e.target.value)}
                     placeholder="e.g. South 24 Parganas"
                     className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
                   />
@@ -277,6 +399,8 @@ export default function FarmerProfilePage() {
                   <input
                     type="text"
                     required
+                    value={stateName}
+                    onChange={(e) => setStateName(e.target.value)}
                     placeholder="e.g. West Bengal"
                     className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
                   />
@@ -316,6 +440,8 @@ export default function FarmerProfilePage() {
                   </div>
                   <input
                     type="text"
+                    value={farmName}
+                    onChange={(e) => setFarmName(e.target.value)}
                     placeholder="e.g. Sunderbans Delta Restoration Society"
                     className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
                   />
@@ -334,6 +460,8 @@ export default function FarmerProfilePage() {
                   <input
                     type="number"
                     step="0.01"
+                    value={landArea}
+                    onChange={(e) => setLandArea(e.target.value)}
                     placeholder="e.g. 25.5"
                     className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 pl-10 pr-4 py-3 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
                   />
@@ -345,7 +473,11 @@ export default function FarmerProfilePage() {
                 <label className="block text-xs font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/70 mb-2">
                   Unit
                 </label>
-                <select className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 px-4 py-3 text-sm text-ink dark:text-sand-50 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15">
+                <select
+                  value={unit}
+                  onChange={(e) => setUnit(e.target.value)}
+                  className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 px-4 py-3 text-sm text-ink dark:text-sand-50 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
+                >
                   <option value="acres">Acres</option>
                   <option value="hectares">Hectares</option>
                 </select>
@@ -358,6 +490,8 @@ export default function FarmerProfilePage() {
                 </label>
                 <textarea
                   rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   placeholder="Describe coastal topology, tidal range, and primary mangrove species (e.g. Rhizophora mucronata, Avicennia marina)..."
                   className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 p-4 text-sm text-ink dark:text-sand-50 placeholder:text-ink-faint/60 dark:placeholder:text-sand-100/40 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15"
                 />
@@ -391,7 +525,7 @@ export default function FarmerProfilePage() {
                   Government ID Type
                 </label>
                 <select className="w-full rounded-xl border border-ocean-900/15 bg-sand-50/50 dark:bg-[#071a20]/60 px-4 py-3 text-sm text-ink dark:text-sand-50 transition-all focus:bg-white focus:outline-none focus:ring-2 focus:ring-mangrove-500/30 focus:border-mangrove-500 dark:border-sand-100/15">
-                  <option value="aadhaar">Aadhaar</option>
+                  <option value="aadhaar">Government ID / Identity Card</option>
                   <option value="passport">Passport</option>
                   <option value="voter_id">Voter ID</option>
                   <option value="driving_license">Driving License</option>
@@ -417,7 +551,7 @@ export default function FarmerProfilePage() {
             </div>
           </motion.div>
 
-          {/* Card 4 — Project Location (Latitude & Longitude inputs removed) */}
+          {/* Card 4 — Project Location */}
           <motion.div
             variants={cardVariants}
             className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-10 shadow-soft"
@@ -448,7 +582,7 @@ export default function FarmerProfilePage() {
                   {isLocating
                     ? "Fetching Coordinates..."
                     : locationCaptured
-                    ? "Coordinates Captured ✓"
+                    ? `Captured (${lat}, ${lng}) ✓`
                     : "Use Current Location"}
                 </span>
               </button>
@@ -533,10 +667,20 @@ export default function FarmerProfilePage() {
 
             <button
               type="submit"
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-8 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500"
+              disabled={saving}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-full bg-ocean-900 hover:bg-ocean-700 dark:bg-mangrove-500 dark:hover:bg-mangrove-300 dark:text-ink px-8 py-3.5 text-sm font-medium tracking-wide text-sand-50 shadow-md transition-all focus:outline-none focus:ring-2 focus:ring-mangrove-500 disabled:opacity-50"
             >
-              <span>Save & Continue</span>
-              <ArrowRight size={16} />
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Saving...</span>
+                </>
+              ) : (
+                <>
+                  <span>Save & Continue</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
             </button>
           </motion.div>
         </motion.form>

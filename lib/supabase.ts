@@ -6,7 +6,7 @@ const DEFAULT_SUPABASE_ANON_KEY = "sb_publishable_vfL2-Hze8IHOc9HzvnTXtQ_zYiDSgo
 
 let supabaseInstance: SupabaseClient | null = null;
 
-export function getSupabaseClient(): SupabaseClient | null {
+export function getSupabaseClient(): SupabaseClient {
   let url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   let anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -25,8 +25,6 @@ export function getSupabaseClient(): SupabaseClient | null {
   return supabaseInstance;
 }
 
-export function createClient() {
+export function createClient(): SupabaseClient {
   return getSupabaseClient();
 }
-
-
