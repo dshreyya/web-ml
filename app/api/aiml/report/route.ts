@@ -1,14 +1,12 @@
-
 import { NextResponse } from "next/server";
+
+export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const response = await fetch(
-      "http://127.0.0.1:8000/report",
-      {
-        cache: "no-store",
-      }
-    );
+    const response = await fetch("http://127.0.0.1:8000/report", {
+      cache: "no-store",
+    });
 
     if (!response.ok) {
       return NextResponse.json(
@@ -37,7 +35,8 @@ export async function GET() {
     return NextResponse.json(
       {
         success: false,
-        error: "Unable to connect to Python AIML API.",
+        error:
+          "Unable to connect to Python AIML API. Make sure the Python API is running on port 8000.",
       },
       { status: 500 }
     );
