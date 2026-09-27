@@ -16,7 +16,6 @@ import {
   Sparkles,
   FileText,
   Download,
-  AlertCircle,
   BarChart3,
   Database,
   CheckCircle2,
@@ -74,6 +73,7 @@ export default function ProjectDetailsPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisMessage, setAnalysisMessage] = useState("");
   const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisDate, setAnalysisDate] = useState<string | null>(null);
 
   const analyzeBaseline = async () => {
     if (!selectedFile) {
@@ -89,12 +89,12 @@ export default function ProjectDetailsPage() {
     }
 
     setIsAnalyzing(true);
+    setAnalysisResult(null);
+    setAnalysisDate(null);
 
     setAnalysisMessage(
       "Uploading ZIP and running YOLO baseline analysis on all images..."
     );
-
-    setAnalysisResult(null);
 
     try {
       const formData = new FormData();
@@ -112,18 +112,36 @@ export default function ProjectDetailsPage() {
         throw new Error(result.error || "AI baseline analysis failed.");
       }
 
+      /*
+       * Save the actual successful analysis result
+       * in React state so the report appears only
+       * after the analysis has completed.
+       */
       setAnalysisResult(result);
 
-      const imagesProcessed = Number(result.images_processed || 0);
+      /*
+       * Actual date/time when the AI baseline analysis
+       * completed successfully.
+       */
+      const completedAt = new Date().toISOString();
 
-      const totalDetections = Number(result.total_detections || 0);
+      setAnalysisDate(completedAt);
+
+      const imagesProcessed = Number(
+        result.images_processed || 0
+      );
+
+      const totalDetections = Number(
+        result.total_detections || 0
+      );
 
       setAnalysisMessage(
         `Baseline analysis complete. ${imagesProcessed} images processed and ${totalDetections} mangrove detections found.`
       );
 
       /*
-       * Save the single aggregated baseline report for this project.
+       * Save the single aggregated baseline report
+       * for this project in Supabase.
        */
       try {
         const supabase = getSupabaseClient();
@@ -604,136 +622,7 @@ export default function ProjectDetailsPage() {
             className="space-y-8"
           >
 
-            {/* Header / Real Download */}
-
-            <motion.div
-              variants={itemVariants}
-              className="flex items-center justify-between flex-wrap gap-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300"
-            >
-
-              <div className="flex items-center gap-2">
-
-                <AlertCircle
-                  size={16}
-                  className="shrink-0"
-                />
-
-                <span>
-                  <strong>Baseline Report:</strong>{" "}
-                  The report generated from your uploaded mangrove ZIP is available as an Excel file.
-                </span>
-
-              </div>
-
-              {/* REAL DOWNLOAD BUTTON */}
-
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href =
-                    "/api/aiml/report";
-                }}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink font-mono text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"
-              >
-                <Download size={13} />
-
-                <span>
-                  Download Baseline Report (Excel)
-                </span>
-
-              </button>
-
-            </motion.div>
-
-            {/* Baseline Summary Cards */}
-
-            <motion.div
-              variants={containerVariants}
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
-            >
-
-              <motion.div
-                variants={itemVariants}
-                className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft"
-              >
-
-                <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
-                  Baseline Carbon Stock
-                </span>
-
-                <span className="text-2xl font-display font-semibold text-ink dark:text-sand-50 block mt-1 font-mono">
-                  1,200{" "}
-                  <span className="text-xs text-ink-soft font-normal">
-                    tCO₂e
-                  </span>
-                </span>
-
-                <span className="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-mono bg-mangrove-500/10 text-mangrove-700 dark:text-mangrove-300 border border-mangrove-500/20">
-                  Demo / Sample Data
-                </span>
-
-              </motion.div>
-
-              <motion.div
-                variants={itemVariants}
-                className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft"
-              >
-
-                <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
-                  Baseline Date
-                </span>
-
-                <span className="text-xl font-display font-semibold text-ink dark:text-sand-50 block mt-1">
-                  January 2025
-                </span>
-
-                <span className="block text-[10px] font-mono text-ink-soft dark:text-sand-100/60 mt-2">
-                  Reference Period
-                </span>
-
-              </motion.div>
-
-              <motion.div
-                variants={itemVariants}
-                className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft"
-              >
-
-                <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
-                  Verification Status
-                </span>
-
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/20 mt-2">
-
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-
-                  <span>Pending Verification</span>
-
-                </div>
-
-              </motion.div>
-
-              <motion.div
-                variants={itemVariants}
-                className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft"
-              >
-
-                <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
-                  Methodology
-                </span>
-
-                <span className="text-sm font-semibold text-ink dark:text-sand-50 block mt-1">
-                  BlueCarbon Nexus Assessment
-                </span>
-
-                <span className="block text-[10px] font-mono text-ink-soft dark:text-sand-100/60 mt-2">
-                  Prototype Framework
-                </span>
-
-              </motion.div>
-
-            </motion.div>
-
-            {/* AIML BASELINE ANALYSIS */}
+            {/* AI BASELINE ANALYSIS */}
 
             <motion.div
               variants={itemVariants}
@@ -769,8 +658,8 @@ export default function ProjectDetailsPage() {
                     );
 
                     setAnalysisMessage("");
-
                     setAnalysisResult(null);
+                    setAnalysisDate(null);
 
                   }}
                   className="block w-full text-sm text-ink-soft dark:text-sand-100/60 file:mr-4 file:rounded-xl file:border-0 file:px-4 file:py-2 file:bg-mangrove-500/10 file:text-mangrove-700 dark:file:text-mangrove-300 file:font-medium"
@@ -793,80 +682,121 @@ export default function ProjectDetailsPage() {
 
                   {isAnalyzing
                     ? "Analyzing Baseline..."
-                    : "Generate AI Baseline"}
+                    : analysisResult
+                      ? "Run Analysis Again"
+                      : "Generate AI Baseline"}
 
                 </button>
 
-                {analysisMessage && (
+                {isAnalyzing && (
+                  <div className="rounded-xl border border-ocean-900/10 bg-sand-50/70 dark:bg-[#071a20]/60 p-4 text-xs font-mono text-ink-soft dark:text-sand-100/70">
+
+                    <div className="flex items-center gap-2">
+
+                      <Activity
+                        size={14}
+                        className="animate-pulse text-mangrove-600"
+                      />
+
+                      <span>
+                        YOLO analysis is running. Processing all images and generating the baseline carbon report...
+                      </span>
+
+                    </div>
+
+                  </div>
+                )}
+
+                {analysisMessage && !isAnalyzing && (
                   <div className="rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 p-4 text-xs font-mono text-ink-soft dark:text-sand-100/70">
                     {analysisMessage}
                   </div>
                 )}
 
+                {/* REAL AI RESULTS */}
+
                 {analysisResult && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="space-y-4">
 
-                    <div className="p-4 rounded-xl bg-mangrove-500/10 border border-mangrove-500/20">
+                    <div className="flex items-center gap-2 text-xs font-mono text-mangrove-700 dark:text-mangrove-300">
 
-                      <span className="block text-[10px] uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
-                        Images Processed
-                      </span>
+                      <CheckCircle2 size={15} />
 
-                      <span className="block mt-1 text-2xl font-mono font-semibold text-ink dark:text-sand-50">
-                        {analysisResult.images_processed ?? 0}
-                      </span>
-
-                    </div>
-
-                    <div className="p-4 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 border border-ocean-900/5 dark:border-sand-100/5">
-
-                      <span className="block text-[10px] uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
-                        Mangrove Detections
-                      </span>
-
-                      <span className="block mt-1 text-2xl font-mono font-semibold text-ink dark:text-sand-50">
-                        {analysisResult.total_detections ?? 0}
+                      <span>
+                        AI baseline analysis completed successfully.
                       </span>
 
                     </div>
 
-                    <div className="p-4 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 border border-ocean-900/5 dark:border-sand-100/5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
 
-                      <span className="block text-[10px] uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
-                        Detected Area
-                      </span>
+                      <div className="p-4 rounded-xl bg-mangrove-500/10 border border-mangrove-500/20">
 
-                      <span className="block mt-1 text-sm font-medium text-ink dark:text-sand-50">
+                        <span className="block text-[10px] uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
+                          Images Processed
+                        </span>
 
-                        {Number(
-                          analysisResult.total_area_hectares ??
-                            analysisResult.area_ha ??
-                            0
-                        ).toFixed(3)}{" "}
+                        <span className="block mt-1 text-2xl font-mono font-semibold text-ink dark:text-sand-50">
+                          {Number(
+                            analysisResult.images_processed ?? 0
+                          ).toLocaleString()}
+                        </span>
 
-                        ha
+                      </div>
 
-                      </span>
+                      <div className="p-4 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 border border-ocean-900/5 dark:border-sand-100/5">
 
-                    </div>
+                        <span className="block text-[10px] uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
+                          Mangrove Detections
+                        </span>
 
-                    <div className="p-4 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 border border-ocean-900/5 dark:border-sand-100/5">
+                        <span className="block mt-1 text-2xl font-mono font-semibold text-ink dark:text-sand-50">
+                          {Number(
+                            analysisResult.total_detections ?? 0
+                          ).toLocaleString()}
+                        </span>
 
-                      <span className="block text-[10px] uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
-                        CO₂ Equivalent
-                      </span>
+                      </div>
 
-                      <span className="block mt-1 text-sm font-medium text-mangrove-700 dark:text-mangrove-300">
+                      <div className="p-4 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 border border-ocean-900/5 dark:border-sand-100/5">
 
-                        {Number(
-                          analysisResult.total_co2e ??
-                            analysisResult.total_co2_tons ??
-                            0
-                        ).toFixed(2)}{" "}
+                        <span className="block text-[10px] uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
+                          Detected Area
+                        </span>
 
-                        tCO₂e
+                        <span className="block mt-1 text-sm font-medium text-ink dark:text-sand-50">
 
-                      </span>
+                          {Number(
+                            analysisResult.total_area_hectares ??
+                              analysisResult.area_ha ??
+                              0
+                          ).toFixed(6)}{" "}
+
+                          ha
+
+                        </span>
+
+                      </div>
+
+                      <div className="p-4 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 border border-ocean-900/5 dark:border-sand-100/5">
+
+                        <span className="block text-[10px] uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
+                          CO₂ Equivalent
+                        </span>
+
+                        <span className="block mt-1 text-sm font-medium text-mangrove-700 dark:text-mangrove-300">
+
+                          {Number(
+                            analysisResult.total_co2e ??
+                              analysisResult.total_co2_tons ??
+                              0
+                          ).toFixed(4)}{" "}
+
+                          tCO₂e
+
+                        </span>
+
+                      </div>
 
                     </div>
 
@@ -883,317 +813,312 @@ export default function ProjectDetailsPage() {
 
             </motion.div>
 
-            {/* Existing Project Details / Results */}
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* BASELINE REPORT ONLY AFTER ANALYSIS */}
 
-              <div className="lg:col-span-7 space-y-8">
+            {analysisResult && (
+              <motion.div
+                variants={itemVariants}
+                className="space-y-8"
+              >
 
-                <motion.div
-                  variants={itemVariants}
-                  className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft space-y-4"
-                >
+                {/* REPORT HEADER */}
 
-                  <div className="flex items-center gap-2.5 pb-3 border-b border-ocean-900/5 dark:border-sand-100/5">
+                <div className="flex items-center justify-between flex-wrap gap-4 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20">
 
-                    <Building2
-                      size={20}
-                      className="text-mangrove-600 dark:text-mangrove-400"
+                  <div className="flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300">
+
+                    <CheckCircle2
+                      size={16}
+                      className="shrink-0"
                     />
 
-                    <h3 className="font-display text-base font-semibold text-ink dark:text-sand-50 tracking-tight">
-                      Project Details
-                    </h3>
+                    <span>
 
-                  </div>
+                      <strong>Baseline Report Generated:</strong>{" "}
+                      The AI analysis has completed and the aggregated Excel report is ready.
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-
-                    <div className="p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
-
-                      <span className="block font-mono text-[10px] uppercase text-ink-soft dark:text-sand-100/50">
-                        Project Name
-                      </span>
-
-                      <span className="font-medium text-ink dark:text-sand-50 block mt-0.5">
-                        Mangrove Restoration Project
-                      </span>
-
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
-
-                      <span className="block font-mono text-[10px] uppercase text-ink-soft dark:text-sand-100/50">
-                        Project ID
-                      </span>
-
-                      <span className="font-mono font-medium text-mangrove-700 dark:text-mangrove-300 block mt-0.5">
-                        {projectId}
-                      </span>
-
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
-
-                      <span className="block font-mono text-[10px] uppercase text-ink-soft dark:text-sand-100/50">
-                        Location
-                      </span>
-
-                      <span className="font-medium text-ink-faint dark:text-sand-100/40 block mt-0.5">
-                        Awaiting Satellite Calibration
-                      </span>
-
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
-
-                      <span className="block font-mono text-[10px] uppercase text-ink-soft dark:text-sand-100/50">
-                        Area
-                      </span>
-
-                      <span className="font-mono font-medium text-ink-faint dark:text-sand-100/40 block mt-0.5">
-                        -- hectares
-                      </span>
-
-                    </div>
-
-                    <div className="p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 sm:col-span-2">
-
-                      <span className="block font-mono text-[10px] uppercase text-ink-soft dark:text-sand-100/50">
-                        Ecosystem Type
-                      </span>
-
-                      <span className="font-medium text-ink dark:text-sand-50 block mt-0.5">
-                        Coastal Mangrove
-                      </span>
-
-                    </div>
-
-                  </div>
-
-                </motion.div>
-
-                <motion.div
-                  variants={itemVariants}
-                  className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft space-y-4"
-                >
-
-                  <div className="flex items-center gap-2.5 pb-3 border-b border-ocean-900/5 dark:border-sand-100/5">
-
-                    <Database
-                      size={20}
-                      className="text-ocean-900 dark:text-sand-100"
-                    />
-
-                    <h3 className="font-display text-base font-semibold text-ink dark:text-sand-50 tracking-tight">
-                      Data Sources Status
-                    </h3>
-
-                  </div>
-
-                  <div className="space-y-2.5 text-xs font-mono">
-
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
-
-                      <span>Drone Survey</span>
-
-                      <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300">
-                        Pending
-                      </span>
-
-                    </div>
-
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
-
-                      <span>Field Survey</span>
-
-                      <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300">
-                        Pending
-                      </span>
-
-                    </div>
-
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
-
-                      <span>Satellite Data</span>
-
-                      <span className="px-2 py-0.5 rounded bg-sand-200/50 dark:bg-sand-100/10 text-ink-soft dark:text-sand-100/60">
-                        Awaiting Calibration
-                      </span>
-
-                    </div>
-
-                  </div>
-
-                </motion.div>
-
-                <motion.div
-                  variants={itemVariants}
-                  className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft space-y-3"
-                >
-
-                  <div className="flex items-center gap-2 pb-2 border-b border-ocean-900/5 dark:border-sand-100/5">
-
-                    <FileText
-                      size={18}
-                      className="text-mangrove-600 dark:text-mangrove-400"
-                    />
-
-                    <h3 className="font-display text-base font-semibold text-ink dark:text-sand-50 tracking-tight">
-                      Methodology Statement
-                    </h3>
-
-                  </div>
-
-                  <p className="text-xs text-ink-soft dark:text-sand-100/70 leading-relaxed">
-                    Baseline carbon assessment estimates the initial carbon stock of the mangrove project using available field, drone, and satellite observations. This prototype demonstrates how baseline information can be recorded before ongoing MRV monitoring.
-                  </p>
-
-                </motion.div>
-
-              </div>
-
-              <div className="lg:col-span-5 space-y-8">
-
-                <motion.div
-                  variants={itemVariants}
-                  className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft space-y-4"
-                >
-
-                  <div className="flex items-center justify-between pb-3 border-b border-ocean-900/5 dark:border-sand-100/5">
-
-                    <div className="flex items-center gap-2">
-
-                      <BarChart3
-                        size={20}
-                        className="text-mangrove-600 dark:text-mangrove-400"
-                      />
-
-                      <h3 className="font-display text-base font-semibold text-ink dark:text-sand-50 tracking-tight">
-                        Carbon Results
-                      </h3>
-
-                    </div>
-
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-mangrove-500/10 text-mangrove-700 dark:text-mangrove-300">
-                      DEMO DATA
                     </span>
 
                   </div>
 
-                  <div className="space-y-3 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.location.href =
+                        "/api/aiml/report";
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink font-mono text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"
+                  >
 
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
+                    <Download size={13} />
 
-                      <span className="text-ink-soft dark:text-sand-100/70">
-                        Above-ground biomass
+                    <span>
+                      Download Baseline Report (Excel)
+                    </span>
+
+                  </button>
+
+                </div>
+
+
+                {/* REAL BASELINE SUMMARY CARDS */}
+
+                <motion.div
+                  variants={containerVariants}
+                  className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+                >
+
+                  {/* TOTAL CO2e */}
+
+                  <motion.div
+                    variants={itemVariants}
+                    className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft"
+                  >
+
+                    <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
+                      Baseline Carbon Stock
+                    </span>
+
+                    <span className="text-2xl font-display font-semibold text-ink dark:text-sand-50 block mt-1 font-mono">
+
+                      {Number(
+                        analysisResult.total_co2e ??
+                          analysisResult.total_co2_tons ??
+                          0
+                      ).toLocaleString(undefined, {
+                        minimumFractionDigits: 4,
+                        maximumFractionDigits: 4,
+                      })}
+
+                      <span className="text-xs text-ink-soft font-normal ml-1">
+                        tCO₂e
                       </span>
 
-                      <span className="font-mono font-semibold text-ink dark:text-sand-50">
-                        800 tonnes
-                      </span>
+                    </span>
+
+                    <span className="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                      AI Generated
+                    </span>
+
+                  </motion.div>
+
+
+                  {/* BASELINE DATE */}
+
+                  <motion.div
+                    variants={itemVariants}
+                    className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft"
+                  >
+
+                    <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
+                      Baseline Date
+                    </span>
+
+                    <span className="text-xl font-display font-semibold text-ink dark:text-sand-50 block mt-1">
+
+                      {analysisDate
+                        ? new Date(
+                            analysisDate
+                          ).toLocaleDateString(
+                            "en-IN",
+                            {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            }
+                          )
+                        : "Not available"}
+
+                    </span>
+
+                    <span className="block text-[10px] font-mono text-ink-soft dark:text-sand-100/60 mt-2">
+                      Date of AI analysis
+                    </span>
+
+                  </motion.div>
+
+
+                  {/* VERIFICATION STATUS */}
+
+                  <motion.div
+                    variants={itemVariants}
+                    className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft"
+                  >
+
+                    <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
+                      Verification Status
+                    </span>
+
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/20 mt-2">
+
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+
+                      <span>Pending Verification</span>
 
                     </div>
 
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
+                  </motion.div>
 
-                      <span className="text-ink-soft dark:text-sand-100/70">
-                        Below-ground biomass
-                      </span>
 
-                      <span className="font-mono font-semibold text-ink dark:text-sand-50">
-                        400 tonnes
-                      </span>
+                  {/* METHODOLOGY */}
 
-                    </div>
+                  <motion.div
+                    variants={itemVariants}
+                    className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft"
+                  >
 
-                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 border border-ocean-900/5 dark:border-sand-100/5">
+                    <span className="block text-[10px] font-mono uppercase tracking-wider text-ink-soft dark:text-sand-100/50">
+                      Methodology
+                    </span>
 
-                      <span className="font-medium text-ink dark:text-sand-50">
-                        Total biomass
-                      </span>
+                    <span className="text-sm font-semibold text-ink dark:text-sand-50 block mt-1">
+                      BlueCarbon Nexus Assessment
+                    </span>
 
-                      <span className="font-mono font-bold text-ink dark:text-sand-50">
-                        1,200 tonnes
-                      </span>
+                    <span className="block text-[10px] font-mono text-ink-soft dark:text-sand-100/60 mt-2">
+                      YOLOv8 + IPCC-based carbon estimation
+                    </span>
 
-                    </div>
-
-                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-mangrove-500/15 border border-mangrove-500/20 text-mangrove-900 dark:text-mangrove-200">
-
-                      <span className="font-semibold">
-                        Estimated carbon stock
-                      </span>
-
-                      <span className="font-mono font-bold text-sm">
-                        1,200 tCO₂e
-                      </span>
-
-                    </div>
-
-                  </div>
+                  </motion.div>
 
                 </motion.div>
 
+
+                {/* DETAILED CARBON RESULTS */}
+
                 <motion.div
                   variants={itemVariants}
-                  className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft space-y-4"
+                  className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft"
                 >
 
                   <div className="flex items-center gap-2.5 pb-3 border-b border-ocean-900/5 dark:border-sand-100/5">
 
-                    <CheckCircle2
+                    <BarChart3
                       size={20}
-                      className="text-amber-600 dark:text-amber-400"
+                      className="text-mangrove-600 dark:text-mangrove-400"
                     />
 
                     <h3 className="font-display text-base font-semibold text-ink dark:text-sand-50 tracking-tight">
-                      Verification Info
+                      Baseline Carbon Results
                     </h3>
 
                   </div>
 
-                  <div className="space-y-3 text-xs">
+                  <div className="mt-5 space-y-3 text-xs">
 
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
 
-                      <span className="text-ink-soft dark:text-sand-100/60">
-                        Status:
+                      <span className="text-ink-soft dark:text-sand-100/70">
+                        Above-ground carbon
                       </span>
 
-                      <span className="font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 font-medium">
-                        Pending Verification
-                      </span>
+                      <span className="font-mono font-semibold text-ink dark:text-sand-50">
 
-                    </div>
+                        {Number(
+                          analysisResult.total_agb_tC ??
+                            analysisResult.agb_tC ??
+                            0
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 4,
+                          maximumFractionDigits: 4,
+                        })}{" "}
 
-                    <div className="flex items-center justify-between">
+                        tC
 
-                      <span className="text-ink-soft dark:text-sand-100/60">
-                        Verified By:
-                      </span>
-
-                      <span className="font-medium text-ink dark:text-sand-50">
-                        Not yet verified
-                      </span>
-
-                    </div>
-
-                    <div className="flex items-center justify-between">
-
-                      <span className="text-ink-soft dark:text-sand-100/60">
-                        Verification Date:
-                      </span>
-
-                      <span className="font-mono text-ink-faint dark:text-sand-100/40">
-                        Not available
                       </span>
 
                     </div>
 
-                    <div className="p-3 rounded-xl bg-sand-50/80 dark:bg-[#071a20]/80 border border-ocean-900/5 dark:border-sand-100/5 text-ink-soft dark:text-sand-100/70 italic leading-relaxed text-[11px]">
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
 
-                      &quot;Baseline report will be reviewed during the project verification process.&quot;
+                      <span className="text-ink-soft dark:text-sand-100/70">
+                        Below-ground carbon
+                      </span>
+
+                      <span className="font-mono font-semibold text-ink dark:text-sand-50">
+
+                        {Number(
+                          analysisResult.total_bgb_tC ??
+                            analysisResult.bgb_tC ??
+                            0
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 4,
+                          maximumFractionDigits: 4,
+                        })}{" "}
+
+                        tC
+
+                      </span>
+
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60">
+
+                      <span className="text-ink-soft dark:text-sand-100/70">
+                        Soil organic carbon
+                      </span>
+
+                      <span className="font-mono font-semibold text-ink dark:text-sand-50">
+
+                        {Number(
+                          analysisResult.total_soc_tC ??
+                            analysisResult.soc_tC ??
+                            0
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 4,
+                          maximumFractionDigits: 4,
+                        })}{" "}
+
+                        tC
+
+                      </span>
+
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-mangrove-500/15 border border-mangrove-500/20 text-mangrove-900 dark:text-mangrove-200">
+
+                      <span className="font-semibold">
+                        Total Carbon
+                      </span>
+
+                      <span className="font-mono font-bold text-sm">
+
+                        {Number(
+                          analysisResult.total_carbon_tC ??
+                            analysisResult.total_carbon ??
+                            0
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 4,
+                          maximumFractionDigits: 4,
+                        })}{" "}
+
+                        tC
+
+                      </span>
+
+                    </div>
+
+                    <div className="flex items-center justify-between p-3.5 rounded-xl bg-ocean-900/10 border border-ocean-900/20">
+
+                      <span className="font-semibold text-ink dark:text-sand-50">
+                        CO₂ Equivalent
+                      </span>
+
+                      <span className="font-mono font-bold text-sm text-mangrove-700 dark:text-mangrove-300">
+
+                        {Number(
+                          analysisResult.total_co2e ??
+                            analysisResult.total_co2_tons ??
+                            0
+                        ).toLocaleString(undefined, {
+                          minimumFractionDigits: 4,
+                          maximumFractionDigits: 4,
+                        })}{" "}
+
+                        tCO₂e
+
+                      </span>
 
                     </div>
 
@@ -1201,9 +1126,8 @@ export default function ProjectDetailsPage() {
 
                 </motion.div>
 
-              </div>
-
-            </div>
+              </motion.div>
+            )}
 
           </motion.div>
         )}

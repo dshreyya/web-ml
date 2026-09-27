@@ -122,118 +122,217 @@ export default function FarmerDocumentsPage() {
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userId) return;
+  e.preventDefault();
 
-    try {
-      setSubmitting(true);
+  if (!userId) return;
 
-      // Prepare list of document metadata entries to save
-      const docEntries: Array<{
-        user_id: string;
-        farmer_profile_id: string | null;
-        document_type: string;
-        document_url: string;
-        document_name: string;
-        status: string;
-      }> = [];
+  try {
+    setSubmitting(true);
 
-      if (uploads.idCard) {
-        docEntries.push({
-          user_id: userId,
-          farmer_profile_id: farmerProfileId,
-          document_type: "GOVERNMENT_ID",
-          document_url: `/uploads/${userId}/id_card_${uploads.idCard.name}`,
-          document_name: uploads.idCard.name,
-          status: "PENDING_VERIFICATION",
+    const docEntries: Array<{
+      user_id: string;
+      farmer_profile_id: string | null;
+      document_type: string;
+      document_url: string;
+      document_name: string;
+      status: string;
+    }> = [];
+
+    // Helper function:
+    // Upload the actual file to Supabase Storage
+    // and return the exact storage path.
+    const uploadFile = async (
+      file: File,
+      prefix: string,
+      index?: number
+    ) => {
+      const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
+      const uniquePart = crypto.randomUUID();
+
+      const storageFileName =
+        index !== undefined
+          ? `${prefix}_${index}_${uniquePart}_${safeFileName}`
+          : `${prefix}_${uniquePart}_${safeFileName}`;
+
+      // IMPORTANT:
+      // This exact path will be used in both Storage
+      // and farmer_documents.document_url
+      const storagePath = `${userId}/${storageFileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("farmer-documents")
+        .upload(storagePath, file, {
+          cacheControl: "3600",
+          upsert: false,
         });
+
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw new Error(
+          `Failed to upload ${file.name}: ${uploadError.message}`
+        );
       }
 
-      if (uploads.landOwnership) {
-        docEntries.push({
-          user_id: userId,
-          farmer_profile_id: farmerProfileId,
-          document_type: "LAND_OWNERSHIP",
-          document_url: `/uploads/${userId}/land_${uploads.landOwnership.name}`,
-          document_name: uploads.landOwnership.name,
-          status: "PENDING_VERIFICATION",
-        });
-      }
+      return storagePath;
+    };
 
-      if (uploads.geolocationProof) {
-        docEntries.push({
-          user_id: userId,
-          farmer_profile_id: farmerProfileId,
-          document_type: "GEOLOCATION_MAP",
-          document_url: `/uploads/${userId}/geo_${uploads.geolocationProof.name}`,
-          document_name: uploads.geolocationProof.name,
-          status: "PENDING_VERIFICATION",
-        });
-      }
+    // --------------------------------------------------
+    // 1. GOVERNMENT ID
+    // --------------------------------------------------
+    if (uploads.idCard) {
+      const storagePath = await uploadFile(
+        uploads.idCard,
+        "id_card"
+      );
 
-      if (uploads.projectImages && uploads.projectImages.length > 0) {
-        Array.from(uploads.projectImages).forEach((file, idx) => {
-          docEntries.push({
-            user_id: userId,
-            farmer_profile_id: farmerProfileId,
-            document_type: "PROJECT_IMAGE",
-            document_url: `/uploads/${userId}/img_${idx}_${file.name}`,
-            document_name: file.name,
-            status: "PENDING_VERIFICATION",
-          });
-        });
-      }
+      docEntries.push({
+        user_id: userId,
+        farmer_profile_id: farmerProfileId,
+        document_type: "GOVERNMENT_ID",
+        document_url: storagePath,
+        document_name: uploads.idCard.name,
+        status: "PENDING_VERIFICATION",
+      });
+    }
 
-      // 1. Insert document entries into farmer_documents table if any were selected
-      if (docEntries.length > 0) {
-        const { error: docError } = await supabase
-          .from("farmer_documents")
-          .insert(docEntries);
+    // --------------------------------------------------
+    // 2. LAND OWNERSHIP
+    // --------------------------------------------------
+    if (uploads.landOwnership) {
+      const storagePath = await uploadFile(
+        uploads.landOwnership,
+        "land"
+      );
 
-        if (docError) {
-          console.error("Error inserting farmer documents:", docError);
-        }
-      }
+      docEntries.push({
+        user_id: userId,
+        farmer_profile_id: farmerProfileId,
+        document_type: "LAND_OWNERSHIP",
+        document_url: storagePath,
+        document_name: uploads.landOwnership.name,
+        status: "PENDING_VERIFICATION",
+      });
+    }
 
-      // 2. Update onboarding_status to PENDING_VERIFICATION in farmer_profiles
-      const { error: profileError } = await supabase
-        .from("farmer_profiles")
-        .upsert(
-          {
-            user_id: userId,
-            onboarding_status: "PENDING_VERIFICATION",
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" }
+    // --------------------------------------------------
+    // 3. GEOLOCATION PROOF
+    // --------------------------------------------------
+    if (uploads.geolocationProof) {
+      const storagePath = await uploadFile(
+        uploads.geolocationProof,
+        "geo"
+      );
+
+      docEntries.push({
+        user_id: userId,
+        farmer_profile_id: farmerProfileId,
+        document_type: "GEOLOCATION_MAP",
+        document_url: storagePath,
+        document_name: uploads.geolocationProof.name,
+        status: "PENDING_VERIFICATION",
+      });
+    }
+
+    // --------------------------------------------------
+    // 4. PROJECT IMAGES
+    // --------------------------------------------------
+    if (
+      uploads.projectImages &&
+      uploads.projectImages.length > 0
+    ) {
+      const projectFiles = Array.from(
+        uploads.projectImages
+      );
+
+      for (let index = 0; index < projectFiles.length; index++) {
+        const file = projectFiles[index];
+
+        const storagePath = await uploadFile(
+          file,
+          "img",
+          index
         );
 
-      if (profileError) {
-        console.error("Error updating profile status:", profileError);
-        alert("Failed to update onboarding status. Please try again.");
+        docEntries.push({
+          user_id: userId,
+          farmer_profile_id: farmerProfileId,
+          document_type: "PROJECT_IMAGE",
+          document_url: storagePath,
+          document_name: file.name,
+          status: "PENDING_VERIFICATION",
+        });
+      }
+    }
+
+    // --------------------------------------------------
+    // 5. SAVE DOCUMENT METADATA IN DATABASE
+    // --------------------------------------------------
+    if (docEntries.length > 0) {
+      const { error: docError } = await supabase
+        .from("farmer_documents")
+        .insert(docEntries);
+
+      if (docError) {
+        console.error(
+          "Error inserting farmer documents:",
+          docError
+        );
+
+        alert(
+          `Documents uploaded, but metadata could not be saved: ${docError.message}`
+        );
+
         return;
       }
-
-      // 3. Advance to verification step
-      router.push("/farmer/onboarding/verification");
-    } catch (err) {
-      console.error("Document submit error:", err);
-    } finally {
-      setSubmitting(false);
     }
-  };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-sand-100 dark:bg-[#061418] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-mangrove-600 dark:text-mangrove-400" />
-          <p className="text-xs font-mono text-ink-soft dark:text-sand-100/70">
-            Initializing document portal...
-          </p>
-        </div>
-      </div>
+    // --------------------------------------------------
+    // 6. UPDATE FARMER PROFILE STATUS
+    // --------------------------------------------------
+    const { error: profileError } = await supabase
+      .from("farmer_profiles")
+      .upsert(
+        {
+          user_id: userId,
+          onboarding_status: "PENDING_VERIFICATION",
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "user_id",
+        }
+      );
+
+    if (profileError) {
+      console.error(
+        "Error updating profile status:",
+        profileError
+      );
+
+      alert(
+        "Documents were uploaded, but the onboarding status could not be updated."
+      );
+
+      return;
+    }
+
+    // --------------------------------------------------
+    // 7. GO TO VERIFICATION PAGE
+    // --------------------------------------------------
+    router.push("/farmer/onboarding/verification");
+  } catch (err) {
+    console.error("Document submit error:", err);
+
+    alert(
+      err instanceof Error
+        ? err.message
+        : "Failed to upload documents. Please try again."
     );
+  } finally {
+    setSubmitting(false);
   }
+};
+
 
   return (
     <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
