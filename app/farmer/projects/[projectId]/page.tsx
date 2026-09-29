@@ -14,10 +14,8 @@ import {
   Activity,
   Layers,
   Sparkles,
-  FileText,
   Download,
   BarChart3,
-  Database,
   CheckCircle2,
   Satellite,
   Trees,
@@ -63,69 +61,132 @@ const itemVariants = {
 export default function ProjectDetailsPage() {
   const router = useRouter();
   const params = useParams();
-  const projectId = params.projectId;
+
+  const projectId = String(params.projectId);
 
   const [activeTab, setActiveTab] = useState<
     "overview" | "baseline" | "mrv" | "credits"
   >("overview");
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
   const [analysisMessage, setAnalysisMessage] = useState("");
-  const [analysisResult, setAnalysisResult] = useState<any>(null);
-  const [analysisDate, setAnalysisDate] = useState<string | null>(null);
+
+  const [analysisResult, setAnalysisResult] =
+    useState<any>(null);
+
+  const [analysisDate, setAnalysisDate] =
+    useState<string | null>(null);
+
+  /*
+   * ============================================================
+   * TABS
+   * ============================================================
+   */
+
+  const tabs = [
+    {
+      id: "overview",
+      label: "Overview",
+    },
+    {
+      id: "baseline",
+      label: "AI Baseline",
+    },
+    {
+      id: "mrv",
+      label: "MRV & Verification",
+    },
+    {
+      id: "credits",
+      label: "Carbon Credits",
+    },
+  ];
+
+  /*
+   * ============================================================
+   * GENERATE BASELINE
+   * ============================================================
+   *
+   * ZIP upload
+   *     ↓
+   * Python YOLO API
+   *     ↓
+   * Aggregated baseline result
+   *     ↓
+   * Save baseline_reports
+   *     ↓
+   * Create/update mangrove_projects
+   *     ↓
+   * status = PENDING_VERIFICATION
+   *     ↓
+   * Authority Review
+   *     ↓
+   * status = APPROVED
+   *     ↓
+   * Industry Marketplace can display it
+   *
+   * Authority approval is required for marketplace visibility.
+   */
 
   const analyzeBaseline = async () => {
     if (!selectedFile) {
-      setAnalysisMessage("Please select the mangrove ZIP file first.");
-      return;
-    }
-
-    if (!selectedFile.name.toLowerCase().endsWith(".zip")) {
-      setAnalysisMessage(
-        "Please upload a ZIP file containing the mangrove images."
-      );
+      setAnalysisMessage("Please select a ZIP file first.");
       return;
     }
 
     setIsAnalyzing(true);
+    setAnalysisMessage("");
     setAnalysisResult(null);
     setAnalysisDate(null);
 
-    setAnalysisMessage(
-      "Uploading ZIP and running YOLO baseline analysis on all images..."
-    );
-
     try {
+      /*
+       * --------------------------------------------------------
+       * SEND ZIP TO PYTHON AIML API
+       * --------------------------------------------------------
+       */
+
       const formData = new FormData();
 
       formData.append("file", selectedFile);
 
-      const response = await fetch(`${AIML_API_URL}/baseline`, {
-        method: "POST",
-        body: formData,
-      });
+      const response = await fetch(
+        `${AIML_API_URL}/baseline`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
 
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || "AI baseline analysis failed.");
+        throw new Error(
+          result.error || "Baseline analysis failed."
+        );
       }
 
       /*
-       * Save the actual successful analysis result
-       * in React state so the report appears only
-       * after the analysis has completed.
+       * --------------------------------------------------------
+       * STORE REAL AI RESULT IN UI
+       * --------------------------------------------------------
        */
+
       setAnalysisResult(result);
 
-      /*
-       * Actual date/time when the AI baseline analysis
-       * completed successfully.
-       */
-      const completedAt = new Date().toISOString();
+      const completedAt =
+        new Date().toISOString();
 
       setAnalysisDate(completedAt);
+
+      /*
+       * --------------------------------------------------------
+       * EXTRACT REAL AI VALUES
+       * --------------------------------------------------------
+       */
 
       const imagesProcessed = Number(
         result.images_processed || 0
@@ -135,92 +196,422 @@ export default function ProjectDetailsPage() {
         result.total_detections || 0
       );
 
-      setAnalysisMessage(
-        `Baseline analysis complete. ${imagesProcessed} images processed and ${totalDetections} mangrove detections found.`
+      const areaHa = Number(
+        result.total_area_hectares ??
+          result.area_ha ??
+          0
+      );
+
+      const totalCo2e = Number(
+        result.total_co2e ??
+          result.total_co2_tons ??
+          0
       );
 
       /*
-       * Save the single aggregated baseline report
-       * for this project in Supabase.
+       * --------------------------------------------------------
+       * SUPABASE
+       * --------------------------------------------------------
        */
-      try {
-        const supabase = getSupabaseClient();
 
-        if (!supabase) {
-          console.error("Supabase client is not available.");
-          return;
-        }
+      const supabase =
+        getSupabaseClient();
 
-        const { data: sessionData } =
-          await supabase.auth.getSession();
-
-        const farmerId =
-          sessionData.session?.user?.id ?? null;
-
-        const { error: reportError } = await supabase
-          .from("baseline_reports")
-          .insert({
-            project_id: String(projectId),
-            farmer_id: farmerId,
-            status: "completed",
-
-            images_processed: imagesProcessed,
-
-            total_detections: totalDetections,
-
-            total_area_m2: Number(
-              result.total_area_m2 || 0
-            ),
-
-            area_ha: Number(
-              result.total_area_hectares ??
-                result.area_ha ??
-                0
-            ),
-
-            agb_tC: Number(
-              result.total_agb_tC ??
-                result.agb_tC ??
-                0
-            ),
-
-            bgb_tC: Number(
-              result.total_bgb_tC ??
-                result.bgb_tC ??
-                0
-            ),
-
-            soc_tC: Number(
-              result.total_soc_tC ??
-                result.soc_tC ??
-                0
-            ),
-
-            total_carbon_tC: Number(
-              result.total_carbon_tC ??
-                result.total_carbon ??
-                0
-            ),
-
-            total_co2e: Number(
-              result.total_co2e ??
-                result.total_co2_tons ??
-                0
-            ),
-          });
-
-        if (reportError) {
-          console.error(
-            "Supabase baseline report save error:",
-            reportError
-          );
-        }
-      } catch (saveError) {
-        console.error(
-          "Could not save baseline report to Supabase:",
-          saveError
+      if (!supabase) {
+        throw new Error(
+          "Supabase client is not available."
         );
       }
+
+      /*
+       * --------------------------------------------------------
+       * GET CURRENT FARMER
+       * --------------------------------------------------------
+       */
+
+      const { data: sessionData } =
+        await supabase.auth.getSession();
+
+      const farmerId =
+        sessionData.session?.user?.id ?? null;
+
+      if (!farmerId) {
+        throw new Error(
+          "Farmer session not found. Please login again."
+        );
+      }
+
+      /*
+       * ========================================================
+       * CREATE A FARMER-SPECIFIC PROJECT ID
+       * ========================================================
+       *
+       * This allows different Farmers to use the same ZIP file
+       * or the same project URL without sharing the same database
+       * project row.
+       *
+       * Existing Farmer project:
+       *     primary-project
+       *
+       * New Farmer using the same project URL:
+       *     primary-project-<farmer-id-prefix>
+       */
+
+      let farmerProjectId =
+        `${projectId}-${farmerId.slice(0, 8)}`;
+
+      /*
+       * Check whether this Farmer already owns the original
+       * project ID. If yes, keep that existing project ID so
+       * repeated baseline runs update the same project.
+       */
+
+      const {
+        data: existingOwnedProject,
+        error: existingProjectError,
+      } = await supabase
+        .from("mangrove_projects")
+        .select("project_id")
+        .eq(
+          "project_id",
+          String(projectId)
+        )
+        .eq(
+          "farmer_id",
+          farmerId
+        )
+        .maybeSingle();
+
+      if (existingProjectError) {
+        console.error(
+          "Existing project lookup error:",
+          JSON.stringify(
+            existingProjectError,
+            null,
+            2
+          )
+        );
+
+        throw new Error(
+          "Could not check your existing project."
+        );
+      }
+
+      if (existingOwnedProject) {
+        farmerProjectId =
+          existingOwnedProject.project_id;
+      }
+
+      console.log(
+        "Farmer ID:",
+        farmerId
+      );
+
+      console.log(
+        "Farmer Project ID:",
+        farmerProjectId
+      );
+
+      /*
+       * ========================================================
+       * SAVE / UPDATE BASELINE REPORT
+       * ========================================================
+       *
+       * One baseline report is maintained for each
+       * project + farmer combination.
+       */
+
+      const {
+        data: existingReport,
+        error: existingReportError,
+      } = await supabase
+        .from("baseline_reports")
+        .select("id")
+        .eq(
+          "project_id",
+          farmerProjectId
+        )
+        .eq(
+          "farmer_id",
+          farmerId
+        )
+        .maybeSingle();
+
+      if (existingReportError) {
+        console.error(
+          "Existing baseline report lookup error:",
+          JSON.stringify(
+            existingReportError,
+            null,
+            2
+          )
+        );
+
+        throw new Error(
+          "Could not check the existing baseline report."
+        );
+      }
+
+      const reportPayload = {
+        project_id:
+          farmerProjectId,
+
+        farmer_id:
+          farmerId,
+
+        status:
+          "completed",
+
+        images_processed:
+          imagesProcessed,
+
+        total_detections:
+          totalDetections,
+
+        total_area_m2:
+          Number(
+            result.total_area_m2 ||
+              0
+          ),
+
+        area_ha:
+          areaHa,
+
+        agb_tC:
+          Number(
+            result.total_agb_tC ??
+              result.agb_tC ??
+              0
+          ),
+
+        bgb_tC:
+          Number(
+            result.total_bgb_tC ??
+              result.bgb_tC ??
+              0
+          ),
+
+        soc_tC:
+          Number(
+            result.total_soc_tC ??
+              result.soc_tC ??
+              0
+          ),
+
+        total_carbon_tC:
+          Number(
+            result.total_carbon_tC ??
+              result.total_carbon ??
+              0
+          ),
+
+        total_co2e:
+          totalCo2e,
+      };
+
+      if (existingReport) {
+        const {
+          error: reportUpdateError,
+        } = await supabase
+          .from("baseline_reports")
+          .update(reportPayload)
+          .eq(
+            "id",
+            existingReport.id
+          );
+
+        if (reportUpdateError) {
+          console.error(
+            "Baseline report update error:",
+            JSON.stringify(
+              reportUpdateError,
+              null,
+              2
+            )
+          );
+
+          throw new Error(
+            "Baseline report could not be updated."
+          );
+        }
+      } else {
+        const {
+          error: reportInsertError,
+        } = await supabase
+          .from("baseline_reports")
+          .insert(reportPayload);
+
+        if (reportInsertError) {
+          console.error(
+            "Baseline report insert error:",
+            JSON.stringify(
+              reportInsertError,
+              null,
+              2
+            )
+          );
+
+          throw new Error(
+            "Baseline report could not be saved."
+          );
+        }
+      }
+
+      /*
+       * ========================================================
+       * SAVE / UPDATE PROJECT
+       * ========================================================
+       *
+       * Existing project for this Farmer:
+       *     UPDATE
+       *
+       * New Farmer:
+       *     CREATE a new Farmer-specific project ID
+       *
+       * Project status:
+       *     PENDING_VERIFICATION
+       */
+
+      const projectPayload = {
+        project_id:
+          farmerProjectId,
+
+        farmer_id:
+          farmerId,
+
+        project_name:
+          "Mangrove Restoration Project",
+
+        location:
+          "Blue Carbon Restoration Site",
+
+        state:
+          null,
+
+        area_ha:
+          areaHa,
+
+        available_credits:
+          totalCo2e,
+
+        credit_price:
+          1800,
+
+        status:
+          "PENDING_VERIFICATION",
+
+        updated_at:
+          new Date().toISOString(),
+      };
+
+      /*
+       * First check whether the Farmer-specific project already exists.
+       */
+
+      const {
+        data: existingFarmerProject,
+        error: farmerProjectLookupError,
+      } = await supabase
+        .from("mangrove_projects")
+        .select("id")
+        .eq(
+          "project_id",
+          farmerProjectId
+        )
+        .eq(
+          "farmer_id",
+          farmerId
+        )
+        .maybeSingle();
+
+      if (farmerProjectLookupError) {
+        console.error(
+          "Farmer project lookup error:",
+          JSON.stringify(
+            farmerProjectLookupError,
+            null,
+            2
+          )
+        );
+
+        throw new Error(
+          "Could not check the Farmer project."
+        );
+      }
+
+      if (existingFarmerProject) {
+        const {
+          data: savedProject,
+          error: projectUpdateError,
+        } = await supabase
+          .from("mangrove_projects")
+          .update(projectPayload)
+          .eq(
+            "id",
+            existingFarmerProject.id
+          )
+          .select()
+          .single();
+
+        if (projectUpdateError) {
+          console.error(
+            "Failed to update project:",
+            JSON.stringify(
+              projectUpdateError,
+              null,
+              2
+            )
+          );
+
+          throw new Error(
+            `Unable to update project for Authority verification: ${projectUpdateError.message}`
+          );
+        }
+
+        console.log(
+          "Project updated successfully:",
+          savedProject
+        );
+      } else {
+        const {
+          data: savedProject,
+          error: projectInsertError,
+        } = await supabase
+          .from("mangrove_projects")
+          .insert(projectPayload)
+          .select()
+          .single();
+
+        if (projectInsertError) {
+          console.error(
+            "Failed to create project:",
+            JSON.stringify(
+              projectInsertError,
+              null,
+              2
+            )
+          );
+
+          throw new Error(
+            `Unable to submit project for Authority verification: ${projectInsertError.message}`
+          );
+        }
+
+        console.log(
+          "Project created successfully:",
+          savedProject
+        );
+      }
+
+      /*
+       * --------------------------------------------------------
+       * SUCCESS
+       * --------------------------------------------------------
+       */
+
+      setAnalysisMessage(
+        `Baseline analysis complete. ${imagesProcessed} images processed and ${totalDetections} mangrove detections found. Your project has been submitted to the Authority for verification.`
+      );
     } catch (error) {
       console.error(
         "AIML baseline analysis error:",
@@ -237,122 +628,132 @@ export default function ProjectDetailsPage() {
     }
   };
 
+  /*
+   * ============================================================
+   * MAIN PAGE
+   * ============================================================
+   */
+
   return (
-    <div className="min-h-screen bg-sand-100 dark:bg-[#061418] text-ink dark:text-sand-100 flex flex-col justify-between relative overflow-x-hidden transition-colors">
+    <div className="min-h-screen bg-sand-50 dark:bg-[#071a20]">
 
-      {/* Background Ambient Glowing Gradients */}
-
-      <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 h-[600px] w-[1100px] rounded-full bg-gradient-to-b from-ocean-300/20 via-mangrove-300/15 to-transparent blur-3xl opacity-70 dark:from-ocean-900/35 dark:via-mangrove-900/25" />
-
-      {/* Global Navbar */}
+      {/* ================================================== */}
+      {/* NAVBAR */}
+      {/* ================================================== */}
 
       <Navbar />
 
-      {/* Main Content */}
+      {/* ================================================== */}
+      {/* MAIN */}
+      {/* ================================================== */}
 
-      <main className="relative z-10 flex-1 container mx-auto px-4 sm:px-6 lg:px-8 pt-28 sm:pt-36 pb-16 max-w-7xl space-y-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-        {/* Navigation Back Button */}
+        {/* ================================================== */}
+        {/* BACK BUTTON */}
+        {/* ================================================== */}
 
-        <motion.div
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
+        <button
+          type="button"
+          onClick={() =>
+            router.push("/farmer/dashboard")
+          }
+          className="inline-flex items-center gap-2 mb-6 text-xs font-mono text-ink-soft dark:text-sand-100/60 hover:text-ink dark:hover:text-sand-50 transition-colors"
         >
-          <button
-            type="button"
-            onClick={() => router.back()}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white/70 dark:bg-[#0a232b]/70 border border-ocean-900/10 dark:border-sand-100/10 text-ink dark:text-sand-50 font-mono text-[11px] font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity"
-          >
-            <ArrowLeft size={13} />
-            <span>Back to Projects</span>
-          </button>
-        </motion.div>
+          <ArrowLeft size={15} />
 
-        {/* HERO HEADER */}
+          <span>
+            Back to Farmer Dashboard
+          </span>
+        </button>
+
+        {/* ================================================== */}
+        {/* PROJECT HEADER */}
+        {/* ================================================== */}
 
         <motion.div
-          initial={{ opacity: 0, y: -12 }}
+          initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{
-            duration: 0.55,
-            ease: [0.16, 1, 0.3, 1],
-          }}
-          className="relative overflow-hidden rounded-[32px] border border-ocean-900/10 bg-gradient-to-br from-white/90 via-sand-50/80 to-mangrove-500/15 dark:border-sand-100/10 dark:from-[#0a232b]/95 dark:via-[#071a20]/90 dark:to-mangrove-950/30 backdrop-blur-xl p-6 sm:p-10 shadow-card"
+          transition={{ duration: 0.45 }}
+          className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft mb-8"
         >
-          <div className="pointer-events-none absolute -right-12 -top-12 h-72 w-72 rounded-full bg-gradient-to-br from-mangrove-400/25 via-ocean-500/20 to-transparent blur-3xl" />
 
-          <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
 
-            <div className="flex items-start gap-4">
+            <div className="space-y-3">
 
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-mangrove-500/20 text-mangrove-800 dark:bg-mangrove-500/20 dark:text-mangrove-300 shrink-0 mt-1 sm:mt-0">
-                <Building2 size={28} />
+              <div className="flex items-center gap-2 text-[10px] font-mono uppercase tracking-wider text-mangrove-700 dark:text-mangrove-300">
+
+                <Building2 size={14} />
+
+                <span>
+                  Blue Carbon Project
+                </span>
+
               </div>
 
-              <div className="space-y-1">
+              <h1 className="font-display text-2xl sm:text-3xl font-semibold text-ink dark:text-sand-50 tracking-tight">
+                Mangrove Restoration Project
+              </h1>
 
-                <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-ink-soft dark:text-sand-100/60">
 
-                  <h1 className="text-2xl sm:text-3xl font-display font-semibold text-ink dark:text-sand-50">
-                    Mangrove Restoration Project
-                  </h1>
+                <span className="inline-flex items-center gap-1.5">
+                  <FileCheck2 size={13} />
 
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-medium bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300 border border-amber-500/20">
-
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-
-                    <span>Pending Verification</span>
-
-                  </span>
-
-                </div>
-
-                <p className="text-xs font-mono text-ink-soft dark:text-sand-100/60">
-
-                  Project ID:{" "}
+                  Project ID:
+                  {" "}
 
                   <span className="text-mangrove-700 dark:text-mangrove-300">
                     {projectId}
                   </span>
+                </span>
 
-                </p>
+                <span className="hidden sm:block">
+                  •
+                </span>
+
+                <span className="inline-flex items-center gap-1.5">
+                  <Layers size={13} />
+
+                  Coastal Mangrove
+                </span>
+
+              </div>
+
+            </div>
+
+            <div className="flex items-center gap-3">
+
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-mono">
+
+                <Clock size={13} />
+
+                Under Review
 
               </div>
 
             </div>
 
           </div>
+
         </motion.div>
 
-        {/* PROJECT NAVIGATION TABS */}
+        {/* ================================================== */}
+        {/* TABS */}
+        {/* ================================================== */}
 
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-white/60 dark:bg-[#0a232b]/60 border border-ocean-900/10 dark:border-sand-100/10 backdrop-blur-md overflow-x-auto"
+          transition={{ duration: 0.35 }}
+          className="flex items-center gap-2 overflow-x-auto pb-2 mb-8"
         >
-          {[
-            {
-              id: "overview",
-              label: "Overview",
-            },
-            {
-              id: "baseline",
-              label: "Baseline Report",
-            },
-            {
-              id: "mrv",
-              label: "MRV & Verification",
-            },
-            {
-              id: "credits",
-              label: "Credits",
-            },
-          ].map((tab) => {
 
-            const isActive = activeTab === tab.id;
+          {tabs.map((tab) => {
+
+            const isActive =
+              activeTab === tab.id;
 
             return (
               <button
@@ -369,13 +770,16 @@ export default function ProjectDetailsPage() {
                     : "text-ink-soft dark:text-sand-100/70 hover:text-ink dark:hover:text-sand-50 hover:bg-sand-100/50 dark:hover:bg-[#071a20]/50"
                 }`}
               >
-                <span>{tab.label}</span>
+                {tab.label}
               </button>
             );
           })}
+
         </motion.div>
 
-        {/* OVERVIEW TAB */}
+        {/* ================================================== */}
+        {/* OVERVIEW */}
+        {/* ================================================== */}
 
         {activeTab === "overview" && (
           <motion.div
@@ -387,7 +791,7 @@ export default function ProjectDetailsPage() {
 
             <div className="lg:col-span-8 space-y-8">
 
-              {/* Overview Metadata */}
+              {/* METADATA */}
 
               <motion.div
                 variants={itemVariants}
@@ -488,7 +892,7 @@ export default function ProjectDetailsPage() {
 
               </motion.div>
 
-              {/* Satellite & MRV Monitoring */}
+              {/* MRV */}
 
               <motion.div
                 variants={itemVariants}
@@ -529,9 +933,9 @@ export default function ProjectDetailsPage() {
 
             </div>
 
-            <div className="lg:col-span-4 space-y-8">
+            {/* RIGHT */}
 
-              {/* Status Card */}
+            <div className="lg:col-span-4 space-y-8">
 
               <motion.div
                 variants={itemVariants}
@@ -561,8 +965,6 @@ export default function ProjectDetailsPage() {
 
               </motion.div>
 
-              {/* Document Checklist */}
-
               <motion.div
                 variants={itemVariants}
                 className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 shadow-soft space-y-4"
@@ -585,7 +987,9 @@ export default function ProjectDetailsPage() {
 
                   <li className="flex items-center justify-between p-2.5 rounded-lg bg-sand-50/70 dark:bg-[#071a20]/60">
 
-                    <span>Land Title Deed</span>
+                    <span>
+                      Land Title Deed
+                    </span>
 
                     <span className="text-mangrove-700 dark:text-mangrove-300 font-bold">
                       ✓ Attached
@@ -595,7 +999,9 @@ export default function ProjectDetailsPage() {
 
                   <li className="flex items-center justify-between p-2.5 rounded-lg bg-sand-50/70 dark:bg-[#071a20]/60">
 
-                    <span>Farmer Identity Verification</span>
+                    <span>
+                      Farmer Identity Verification
+                    </span>
 
                     <span className="text-mangrove-700 dark:text-mangrove-300 font-bold">
                       ✓ Verified
@@ -612,7 +1018,9 @@ export default function ProjectDetailsPage() {
           </motion.div>
         )}
 
-        {/* BASELINE REPORT TAB */}
+        {/* ================================================== */}
+        {/* BASELINE */}
+        {/* ================================================== */}
 
         {activeTab === "baseline" && (
           <motion.div
@@ -622,7 +1030,7 @@ export default function ProjectDetailsPage() {
             className="space-y-8"
           >
 
-            {/* AI BASELINE ANALYSIS */}
+            {/* AI ANALYSIS */}
 
             <motion.div
               variants={itemVariants}
@@ -653,13 +1061,23 @@ export default function ProjectDetailsPage() {
                   accept=".zip,application/zip"
                   onChange={(event) => {
 
-                    setSelectedFile(
-                      event.target.files?.[0] || null
-                    );
+                    const file =
+                      event.target.files?.[0] ||
+                      null;
+
+                    setSelectedFile(file);
 
                     setAnalysisMessage("");
+
                     setAnalysisResult(null);
+
                     setAnalysisDate(null);
+
+                    /*
+                     * Allow the same ZIP file to be
+                     * selected again after a previous run.
+                     */
+                    event.target.value = "";
 
                   }}
                   className="block w-full text-sm text-ink-soft dark:text-sand-100/60 file:mr-4 file:rounded-xl file:border-0 file:px-4 file:py-2 file:bg-mangrove-500/10 file:text-mangrove-700 dark:file:text-mangrove-300 file:font-medium"
@@ -667,14 +1085,18 @@ export default function ProjectDetailsPage() {
 
                 {selectedFile && (
                   <p className="text-xs font-mono text-ink-soft dark:text-sand-100/60">
-                    Selected ZIP: {selectedFile.name}
+                    Selected ZIP:{" "}
+                    {selectedFile.name}
                   </p>
                 )}
 
                 <button
                   type="button"
                   onClick={analyzeBaseline}
-                  disabled={!selectedFile || isAnalyzing}
+                  disabled={
+                    !selectedFile ||
+                    isAnalyzing
+                  }
                   className="inline-flex items-center gap-2 rounded-xl px-5 py-3 bg-mangrove-600 text-white text-xs font-mono font-medium hover:bg-mangrove-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
 
@@ -707,11 +1129,12 @@ export default function ProjectDetailsPage() {
                   </div>
                 )}
 
-                {analysisMessage && !isAnalyzing && (
-                  <div className="rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 p-4 text-xs font-mono text-ink-soft dark:text-sand-100/70">
-                    {analysisMessage}
-                  </div>
-                )}
+                {analysisMessage &&
+                  !isAnalyzing && (
+                    <div className="rounded-xl bg-sand-50/70 dark:bg-[#071a20]/60 p-4 text-xs font-mono text-ink-soft dark:text-sand-100/70">
+                      {analysisMessage}
+                    </div>
+                  )}
 
                 {/* REAL AI RESULTS */}
 
@@ -737,9 +1160,12 @@ export default function ProjectDetailsPage() {
                         </span>
 
                         <span className="block mt-1 text-2xl font-mono font-semibold text-ink dark:text-sand-50">
+
                           {Number(
-                            analysisResult.images_processed ?? 0
+                            analysisResult.images_processed ??
+                              0
                           ).toLocaleString()}
+
                         </span>
 
                       </div>
@@ -751,9 +1177,12 @@ export default function ProjectDetailsPage() {
                         </span>
 
                         <span className="block mt-1 text-2xl font-mono font-semibold text-ink dark:text-sand-50">
+
                           {Number(
-                            analysisResult.total_detections ?? 0
+                            analysisResult.total_detections ??
+                              0
                           ).toLocaleString()}
+
                         </span>
 
                       </div>
@@ -771,7 +1200,6 @@ export default function ProjectDetailsPage() {
                               analysisResult.area_ha ??
                               0
                           ).toFixed(6)}{" "}
-
                           ha
 
                         </span>
@@ -791,7 +1219,6 @@ export default function ProjectDetailsPage() {
                               analysisResult.total_co2_tons ??
                               0
                           ).toFixed(4)}{" "}
-
                           tCO₂e
 
                         </span>
@@ -813,8 +1240,7 @@ export default function ProjectDetailsPage() {
 
             </motion.div>
 
-
-            {/* BASELINE REPORT ONLY AFTER ANALYSIS */}
+            {/* REPORT */}
 
             {analysisResult && (
               <motion.div
@@ -835,7 +1261,9 @@ export default function ProjectDetailsPage() {
 
                     <span>
 
-                      <strong>Baseline Report Generated:</strong>{" "}
+                      <strong>
+                        Baseline Report Generated:
+                      </strong>{" "}
                       The AI analysis has completed and the aggregated Excel report is ready.
 
                     </span>
@@ -861,15 +1289,14 @@ export default function ProjectDetailsPage() {
 
                 </div>
 
-
-                {/* REAL BASELINE SUMMARY CARDS */}
+                {/* SUMMARY CARDS */}
 
                 <motion.div
                   variants={containerVariants}
                   className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
                 >
 
-                  {/* TOTAL CO2e */}
+                  {/* CARBON */}
 
                   <motion.div
                     variants={itemVariants}
@@ -886,10 +1313,13 @@ export default function ProjectDetailsPage() {
                         analysisResult.total_co2e ??
                           analysisResult.total_co2_tons ??
                           0
-                      ).toLocaleString(undefined, {
-                        minimumFractionDigits: 4,
-                        maximumFractionDigits: 4,
-                      })}
+                      ).toLocaleString(
+                        undefined,
+                        {
+                          minimumFractionDigits: 4,
+                          maximumFractionDigits: 4,
+                        }
+                      )}
 
                       <span className="text-xs text-ink-soft font-normal ml-1">
                         tCO₂e
@@ -903,8 +1333,7 @@ export default function ProjectDetailsPage() {
 
                   </motion.div>
 
-
-                  {/* BASELINE DATE */}
+                  {/* DATE */}
 
                   <motion.div
                     variants={itemVariants}
@@ -938,8 +1367,7 @@ export default function ProjectDetailsPage() {
 
                   </motion.div>
 
-
-                  {/* VERIFICATION STATUS */}
+                  {/* VERIFICATION */}
 
                   <motion.div
                     variants={itemVariants}
@@ -954,12 +1382,13 @@ export default function ProjectDetailsPage() {
 
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
 
-                      <span>Pending Verification</span>
+                      <span>
+                        Pending Verification
+                      </span>
 
                     </div>
 
                   </motion.div>
-
 
                   {/* METHODOLOGY */}
 
@@ -984,8 +1413,7 @@ export default function ProjectDetailsPage() {
 
                 </motion.div>
 
-
-                {/* DETAILED CARBON RESULTS */}
+                {/* DETAILED RESULTS */}
 
                 <motion.div
                   variants={itemVariants}
@@ -1019,11 +1447,13 @@ export default function ProjectDetailsPage() {
                           analysisResult.total_agb_tC ??
                             analysisResult.agb_tC ??
                             0
-                        ).toLocaleString(undefined, {
-                          minimumFractionDigits: 4,
-                          maximumFractionDigits: 4,
-                        })}{" "}
-
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits: 4,
+                            maximumFractionDigits: 4,
+                          }
+                        )}{" "}
                         tC
 
                       </span>
@@ -1042,11 +1472,13 @@ export default function ProjectDetailsPage() {
                           analysisResult.total_bgb_tC ??
                             analysisResult.bgb_tC ??
                             0
-                        ).toLocaleString(undefined, {
-                          minimumFractionDigits: 4,
-                          maximumFractionDigits: 4,
-                        })}{" "}
-
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits: 4,
+                            maximumFractionDigits: 4,
+                          }
+                        )}{" "}
                         tC
 
                       </span>
@@ -1065,11 +1497,13 @@ export default function ProjectDetailsPage() {
                           analysisResult.total_soc_tC ??
                             analysisResult.soc_tC ??
                             0
-                        ).toLocaleString(undefined, {
-                          minimumFractionDigits: 4,
-                          maximumFractionDigits: 4,
-                        })}{" "}
-
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits: 4,
+                            maximumFractionDigits: 4,
+                          }
+                        )}{" "}
                         tC
 
                       </span>
@@ -1088,11 +1522,13 @@ export default function ProjectDetailsPage() {
                           analysisResult.total_carbon_tC ??
                             analysisResult.total_carbon ??
                             0
-                        ).toLocaleString(undefined, {
-                          minimumFractionDigits: 4,
-                          maximumFractionDigits: 4,
-                        })}{" "}
-
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits: 4,
+                            maximumFractionDigits: 4,
+                          }
+                        )}{" "}
                         tC
 
                       </span>
@@ -1111,11 +1547,13 @@ export default function ProjectDetailsPage() {
                           analysisResult.total_co2e ??
                             analysisResult.total_co2_tons ??
                             0
-                        ).toLocaleString(undefined, {
-                          minimumFractionDigits: 4,
-                          maximumFractionDigits: 4,
-                        })}{" "}
-
+                        ).toLocaleString(
+                          undefined,
+                          {
+                            minimumFractionDigits: 4,
+                            maximumFractionDigits: 4,
+                          }
+                        )}{" "}
                         tCO₂e
 
                       </span>
@@ -1132,7 +1570,9 @@ export default function ProjectDetailsPage() {
           </motion.div>
         )}
 
-        {/* MRV TAB */}
+        {/* ================================================== */}
+        {/* MRV */}
+        {/* ================================================== */}
 
         {activeTab === "mrv" && (
           <motion.div
@@ -1164,7 +1604,9 @@ export default function ProjectDetailsPage() {
 
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
 
-                    <span>🟢 Monitoring Active</span>
+                    <span>
+                      🟢 Monitoring Active
+                    </span>
 
                   </span>
 
@@ -1206,6 +1648,8 @@ export default function ProjectDetailsPage() {
 
             </motion.div>
 
+            {/* DATA SOURCES */}
+
             <div className="space-y-4">
 
               <h3 className="font-display text-base font-semibold text-ink dark:text-sand-50 tracking-tight">
@@ -1214,158 +1658,98 @@ export default function ProjectDetailsPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
-                <motion.div
-                  variants={itemVariants}
-                  className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft space-y-4 flex flex-col justify-between"
-                >
+                {[
+                  {
+                    icon: "🚁",
+                    title: "Drone Survey",
+                    text: "High-resolution canopy photography and site orthomosaics.",
+                    status: "Available",
+                  },
+                  {
+                    icon: "satellite",
+                    title: "Satellite Data",
+                    text: "Multispectral canopy density and area observations.",
+                    status: "Available",
+                  },
+                  {
+                    icon: "trees",
+                    title: "Field Survey",
+                    text: "On-ground plot measurements, species verification, and soil samples.",
+                    status: "Completed",
+                  },
+                ].map(
+                  (item) => (
+                    <motion.div
+                      key={item.title}
+                      variants={itemVariants}
+                      className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft space-y-4 flex flex-col justify-between"
+                    >
 
-                  <div className="space-y-2">
+                      <div className="space-y-2">
 
-                    <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between">
 
-                      <span className="text-2xl">
-                        🚁
-                      </span>
+                          {item.icon ===
+                          "satellite" ? (
+                            <Satellite
+                              size={24}
+                              className="text-ocean-900 dark:text-sand-100"
+                            />
+                          ) : item.icon ===
+                            "trees" ? (
+                            <Trees
+                              size={24}
+                              className="text-mangrove-600 dark:text-mangrove-400"
+                            />
+                          ) : (
+                            <span className="text-2xl">
+                              {item.icon}
+                            </span>
+                          )}
 
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-medium">
-                        Available
-                      </span>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-medium">
+                            {item.status}
+                          </span>
 
-                    </div>
+                        </div>
 
-                    <h4 className="font-display text-sm font-semibold text-ink dark:text-sand-50">
-                      Drone Survey
-                    </h4>
+                        <h4 className="font-display text-sm font-semibold text-ink dark:text-sand-50">
+                          {item.title}
+                        </h4>
 
-                    <p className="text-xs text-ink-soft dark:text-sand-100/60">
-                      High-resolution canopy photography and site orthomosaics.
-                    </p>
+                        <p className="text-xs text-ink-soft dark:text-sand-100/60">
+                          {item.text}
+                        </p>
 
-                  </div>
+                      </div>
 
-                  <button
-                    type="button"
-                    onClick={() =>
-                      alert(
-                        "Viewing Demo Drone Imagery Evidence..."
-                      )
-                    }
-                    className="inline-flex items-center gap-1.5 w-full justify-center px-3 py-2 rounded-xl bg-sand-50 dark:bg-[#071a20] border border-ocean-900/10 dark:border-sand-100/10 text-ink dark:text-sand-100 text-xs font-mono hover:bg-sand-100 dark:hover:bg-[#0a232b] transition-colors"
-                  >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          alert(
+                            `Viewing Demo ${item.title} Evidence...`
+                          )
+                        }
+                        className="inline-flex items-center gap-1.5 w-full justify-center px-3 py-2 rounded-xl bg-sand-50 dark:bg-[#071a20] border border-ocean-900/10 dark:border-sand-100/10 text-ink dark:text-sand-100 text-xs font-mono hover:bg-sand-100 dark:hover:bg-[#0a232b] transition-colors"
+                      >
 
-                    <Eye size={13} />
+                        <Eye size={13} />
 
-                    <span>
-                      View Evidence (Demo)
-                    </span>
+                        <span>
+                          View Evidence (Demo)
+                        </span>
 
-                  </button>
+                      </button>
 
-                </motion.div>
-
-                <motion.div
-                  variants={itemVariants}
-                  className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft space-y-4 flex flex-col justify-between"
-                >
-
-                  <div className="space-y-2">
-
-                    <div className="flex items-center justify-between">
-
-                      <Satellite
-                        size={24}
-                        className="text-ocean-900 dark:text-sand-100"
-                      />
-
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-medium">
-                        Available
-                      </span>
-
-                    </div>
-
-                    <h4 className="font-display text-sm font-semibold text-ink dark:text-sand-50">
-                      Satellite Data
-                    </h4>
-
-                    <p className="text-xs text-ink-soft dark:text-sand-100/60">
-                      Multispectral canopy density and area observations.
-                    </p>
-
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      alert(
-                        "Viewing Demo Satellite Calibration Feed..."
-                      )
-                    }
-                    className="inline-flex items-center gap-1.5 w-full justify-center px-3 py-2 rounded-xl bg-sand-50 dark:bg-[#071a20] border border-ocean-900/10 dark:border-sand-100/10 text-ink dark:text-sand-100 text-xs font-mono hover:bg-sand-100 dark:hover:bg-[#0a232b] transition-colors"
-                  >
-
-                    <Eye size={13} />
-
-                    <span>
-                      View Evidence (Demo)
-                    </span>
-
-                  </button>
-
-                </motion.div>
-
-                <motion.div
-                  variants={itemVariants}
-                  className="p-5 rounded-2xl bg-white/80 dark:bg-[#0a232b]/80 border border-ocean-900/10 dark:border-sand-100/10 shadow-soft space-y-4 flex flex-col justify-between"
-                >
-
-                  <div className="space-y-2">
-
-                    <div className="flex items-center justify-between">
-
-                      <Trees
-                        size={24}
-                        className="text-mangrove-600 dark:text-mangrove-400"
-                      />
-
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 font-medium">
-                        Completed
-                      </span>
-
-                    </div>
-
-                    <h4 className="font-display text-sm font-semibold text-ink dark:text-sand-50">
-                      Field Survey
-                    </h4>
-
-                    <p className="text-xs text-ink-soft dark:text-sand-100/60">
-                      On-ground plot measurements, species verification, and soil samples.
-                    </p>
-
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      alert(
-                        "Viewing Demo Field Survey Notes..."
-                      )
-                    }
-                    className="inline-flex items-center gap-1.5 w-full justify-center px-3 py-2 rounded-xl bg-sand-50 dark:bg-[#071a20] border border-ocean-900/10 dark:border-sand-100/10 text-ink dark:text-sand-100 text-xs font-mono hover:bg-sand-100 dark:hover:bg-[#0a232b] transition-colors"
-                  >
-
-                    <Eye size={13} />
-
-                    <span>
-                      View Evidence (Demo)
-                    </span>
-
-                  </button>
-
-                </motion.div>
+                    </motion.div>
+                  )
+                )}
 
               </div>
 
             </div>
+
+            {/* LATEST MONITORING */}
 
             <div className="space-y-4">
 
@@ -1441,6 +1825,8 @@ export default function ProjectDetailsPage() {
 
             </div>
 
+            {/* VERIFICATION */}
+
             <motion.div
               variants={itemVariants}
               className="rounded-[28px] border border-ocean-900/10 bg-white/80 dark:border-sand-100/10 dark:bg-[#0a232b]/80 backdrop-blur-md p-6 sm:p-8 shadow-soft space-y-6"
@@ -1467,7 +1853,9 @@ export default function ProjectDetailsPage() {
 
                     <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
 
-                    <span>🟡 Under Review</span>
+                    <span>
+                      🟡 Under Review
+                    </span>
 
                   </span>
 
@@ -1493,12 +1881,9 @@ export default function ProjectDetailsPage() {
 
                   <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
 
-                    <Check
-                      size={14}
-                      className="shrink-0"
-                    />
+                    <Check size={14} />
 
-                    <div className="truncate">
+                    <div>
 
                       <span className="block text-[9px] opacity-70">
                         Step 1
@@ -1514,12 +1899,9 @@ export default function ProjectDetailsPage() {
 
                   <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
 
-                    <Check
-                      size={14}
-                      className="shrink-0"
-                    />
+                    <Check size={14} />
 
-                    <div className="truncate">
+                    <div>
 
                       <span className="block text-[9px] opacity-70">
                         Step 2
@@ -1537,10 +1919,10 @@ export default function ProjectDetailsPage() {
 
                     <Clock
                       size={14}
-                      className="shrink-0 animate-spin"
+                      className="shrink-0"
                     />
 
-                    <div className="truncate">
+                    <div>
 
                       <span className="block text-[9px] opacity-70">
                         Step 3 (Active)
@@ -1558,7 +1940,7 @@ export default function ProjectDetailsPage() {
 
                     <div className="h-3.5 w-3.5 rounded-full border border-current shrink-0" />
 
-                    <div className="truncate">
+                    <div>
 
                       <span className="block text-[9px] opacity-70">
                         Step 4
@@ -1581,7 +1963,9 @@ export default function ProjectDetailsPage() {
           </motion.div>
         )}
 
-        {/* CREDITS TAB */}
+        {/* ================================================== */}
+        {/* CREDITS */}
+        {/* ================================================== */}
 
         {activeTab === "credits" && (
           <motion.div
@@ -1615,7 +1999,9 @@ export default function ProjectDetailsPage() {
 
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
 
-                      <span>🟡 Not Yet Issued</span>
+                      <span>
+                        🟡 Not Yet Issued
+                      </span>
 
                     </span>
 
@@ -1633,7 +2019,7 @@ export default function ProjectDetailsPage() {
                     type="button"
                     onClick={() =>
                       router.push(
-                        "/farmer/marketplace"
+                        "/industry/marketplace"
                       )
                     }
                     className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink font-mono text-xs font-semibold uppercase tracking-wider hover:opacity-90 transition-opacity shadow-sm w-full md:w-auto"
@@ -1714,10 +2100,7 @@ export default function ProjectDetailsPage() {
 
                   <div className="flex items-center gap-2">
 
-                    <Check
-                      size={16}
-                      className="shrink-0"
-                    />
+                    <Check size={16} />
 
                     <div>
 
@@ -1746,7 +2129,7 @@ export default function ProjectDetailsPage() {
 
                     <Clock
                       size={16}
-                      className="shrink-0 animate-spin"
+                      className="shrink-0"
                     />
 
                     <div>
@@ -1960,7 +2343,9 @@ export default function ProjectDetailsPage() {
 
       </main>
 
-      {/* Global Footer */}
+      {/* ====================================================== */}
+      {/* FOOTER */}
+      {/* ====================================================== */}
 
       <Footer />
 
