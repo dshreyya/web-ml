@@ -29,6 +29,20 @@ import {
 import { Navbar } from "@/components/navbar";
 import { Footer } from "@/components/footer";
 import { getSupabaseClient } from "@/lib/supabase";
+import { ethers } from "ethers";
+import BlueCarbonRegistryArtifact from "@/app/lib/contracts/BlueCarbonRegistry.json";
+
+/* ============================================================
+   BLOCKCHAIN CONFIGURATION
+   ============================================================ */
+
+const BLUECARBON_REGISTRY_ADDRESS =
+  "0xd1CFF091a4B4627250148346Ce9131552b02497a";
+
+const SEPOLIA_CHAIN_ID = 11155111n;
+
+const BLUECARBON_REGISTRY_ABI =
+  BlueCarbonRegistryArtifact.abi;
 
 /* ============================================================
    DATABASE STATUS
@@ -88,6 +102,13 @@ interface BaselineReport {
   soc_tC?: number;
   total_carbon_tC?: number;
   total_co2e?: number;
+  report_file_url?: string | null;
+
+  blockchain_status?: string | null;
+  blockchain_tx_hash?: string | null;
+  blockchain_network?: string | null;
+  anchored_at?: string | null;
+  anchored_by_wallet?: string | null;
 }
 
 /* ============================================================
@@ -159,9 +180,7 @@ function formatDate(
    ============================================================ */
 
 export default function AdminProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>(
-    []
-  );
+  const [projects, setProjects] = useState<Project[]>([]);
 
   const [activeTab, setActiveTab] =
     useState<FilterTab>("All");
@@ -478,7 +497,13 @@ export default function AdminProjectsPage() {
             bgb_tC,
             soc_tC,
             total_carbon_tC,
-            total_co2e
+            total_co2e,
+            report_file_url,
+            blockchain_status,
+            blockchain_tx_hash,
+            blockchain_network,
+            anchored_at,
+            anchored_by_wallet
           `
         )
         .eq(
@@ -621,6 +646,289 @@ export default function AdminProjectsPage() {
         error instanceof Error
           ? error.message
           : "Unable to approve project."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  /* ==========================================================
+     ANCHOR APPROVED REPORT ON BLOCKCHAIN
+     ========================================================== */
+
+  const handleAnchorReport = async (
+    project: Project
+  ) => {
+    if (!supabase) {
+      setErrorMessage(
+        "Supabase client is not available."
+      );
+      return;
+    }
+
+    if (project.status !== "APPROVED") {
+      setErrorMessage(
+        "Only approved projects can be anchored on blockchain."
+      );
+      return;
+    }
+
+    if (!baselineReport) {
+      setErrorMessage(
+        "Baseline report is not loaded. Open the project review first."
+      );
+      return;
+    }
+
+    /* --------------------------------------------------------
+       PREVENT RE-ANCHORING
+       -------------------------------------------------------- */
+
+    if (
+      baselineReport.blockchain_status ===
+      "anchored"
+    ) {
+      setMessage(
+        "This baseline report is already anchored on Sepolia."
+      );
+      return;
+    }
+
+    if (!baselineReport.id) {
+      setErrorMessage(
+        "Baseline report ID is missing. Cannot create blockchain proof."
+      );
+      return;
+    }
+
+    if (!baselineReport.report_file_url) {
+      setErrorMessage(
+        "The verified Excel report URL is missing. The report must be stored in Supabase Storage before anchoring."
+      );
+      return;
+    }
+
+    const ethereum = (window as any).ethereum;
+
+    if (!ethereum) {
+      setErrorMessage(
+        "MetaMask is not installed. Please install MetaMask and try again."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Anchor the verified baseline report for "${project.project_name}" on Sepolia?`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setActionLoading(project.id);
+    setMessage("");
+    setErrorMessage("");
+
+    try {
+      /* --------------------------------------------------------
+         CONNECT TO METAMASK
+         -------------------------------------------------------- */
+
+      const provider =
+        new ethers.BrowserProvider(ethereum);
+
+      await provider.send(
+        "eth_requestAccounts",
+        []
+      );
+
+      const network =
+        await provider.getNetwork();
+
+      if (
+        network.chainId !==
+        SEPOLIA_CHAIN_ID
+      ) {
+        throw new Error(
+          "Wrong MetaMask network. Please switch MetaMask to Ethereum Sepolia (Chain ID 11155111) and try again."
+        );
+      }
+
+      const signer =
+        await provider.getSigner();
+
+      const walletAddress =
+        await signer.getAddress();
+
+      /* --------------------------------------------------------
+         CHECK VERIFIER ROLE
+         -------------------------------------------------------- */
+
+      const registry =
+        new ethers.Contract(
+          BLUECARBON_REGISTRY_ADDRESS,
+          BLUECARBON_REGISTRY_ABI,
+          signer
+        );
+
+      const verifierRole =
+        await registry.VERIFIER_ROLE();
+
+      const hasVerifierRole =
+        await registry.hasRole(
+          verifierRole,
+          walletAddress
+        );
+
+      if (!hasVerifierRole) {
+        throw new Error(
+          `Connected MetaMask wallet ${walletAddress} does not have the VERIFIER_ROLE on the BlueCarbonRegistry contract. Connect the Authority verifier wallet used to deploy the contract.`
+        );
+      }
+
+      /* --------------------------------------------------------
+         DOWNLOAD EXACT VERIFIED EXCEL FILE
+         -------------------------------------------------------- */
+
+      const reportResponse =
+        await fetch(
+          baselineReport.report_file_url
+        );
+
+      if (!reportResponse.ok) {
+        throw new Error(
+          `Unable to download the verified baseline report (${reportResponse.status}).`
+        );
+      }
+
+      const reportBuffer =
+        await reportResponse.arrayBuffer();
+
+      /* --------------------------------------------------------
+         SHA-256 HASH
+         -------------------------------------------------------- */
+
+      const hashBuffer =
+        await crypto.subtle.digest(
+          "SHA-256",
+          reportBuffer
+        );
+
+      const hashBytes =
+        new Uint8Array(hashBuffer);
+
+      const reportHash =
+        `0x${Array.from(hashBytes)
+          .map((byte) =>
+            byte
+              .toString(16)
+              .padStart(2, "0")
+          )
+          .join("")}`;
+
+      if (
+        !ethers.isHexString(
+          reportHash,
+          32
+        )
+      ) {
+        throw new Error(
+          "Failed to generate a valid SHA-256 report hash."
+        );
+      }
+
+      /* --------------------------------------------------------
+         ANCHOR ON SEPOLIA
+         -------------------------------------------------------- */
+
+      const transaction =
+        await registry.anchorReport(
+          baselineReport.id,
+          project.project_id,
+          reportHash
+        );
+
+      setMessage(
+        "Blockchain transaction submitted. Waiting for Sepolia confirmation..."
+      );
+
+      const receipt =
+        await transaction.wait();
+
+      if (!receipt) {
+        throw new Error(
+          "Blockchain transaction was not confirmed."
+        );
+      }
+
+      /* --------------------------------------------------------
+         SAVE BLOCKCHAIN RESULT IN SUPABASE
+         -------------------------------------------------------- */
+
+      const anchoredAt =
+        new Date().toISOString();
+
+      const {
+        error: blockchainDbError,
+      } = await supabase
+        .from("baseline_reports")
+        .update({
+          blockchain_status: "anchored",
+          blockchain_tx_hash:
+            transaction.hash,
+          blockchain_network:
+            "Sepolia",
+          anchored_at: anchoredAt,
+          anchored_by_wallet:
+            walletAddress,
+        })
+        .eq(
+          "id",
+          baselineReport.id
+        );
+
+      if (blockchainDbError) {
+        throw new Error(
+          `The blockchain transaction was confirmed, but the Supabase blockchain record could not be saved: ${blockchainDbError.message}. Transaction hash: ${transaction.hash}`
+        );
+      }
+
+      /* --------------------------------------------------------
+         UPDATE LOCAL REPORT STATE
+         -------------------------------------------------------- */
+
+      setBaselineReport(
+        (previous) =>
+          previous
+            ? {
+                ...previous,
+                blockchain_status:
+                  "anchored",
+                blockchain_tx_hash:
+                  transaction.hash,
+                blockchain_network:
+                  "Sepolia",
+                anchored_at:
+                  anchoredAt,
+                anchored_by_wallet:
+                  walletAddress,
+              }
+            : previous
+      );
+
+      setMessage(
+        `Baseline report anchored successfully on Sepolia. Transaction: ${transaction.hash}`
+      );
+    } catch (error) {
+      console.error(
+        "Blockchain anchoring error:",
+        error
+      );
+
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to anchor the baseline report on blockchain."
       );
     } finally {
       setActionLoading(null);
@@ -1758,18 +2066,109 @@ export default function AdminProjectsPage() {
 
                 {selectedProject.status ===
                   "APPROVED" && (
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
-                    <div className="flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300">
-                      <CheckCircle2
-                        size={16}
-                      />
+                  <div className="space-y-3">
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                      <div className="flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300">
+                        <CheckCircle2
+                          size={16}
+                        />
 
-                      <span>
-                        This project has already been
-                        approved and is eligible for
-                        Industry Marketplace visibility.
-                      </span>
+                        <span>
+                          This project has already been
+                          approved and is eligible for
+                          Industry Marketplace visibility.
+                        </span>
+                      </div>
                     </div>
+
+                    {/* ==================================================
+                        BLOCKCHAIN STATUS
+                       ================================================== */}
+
+                    {baselineReport?.blockchain_status ===
+                    "anchored" ? (
+                      <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                        <div className="flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300">
+                          <CheckCircle2
+                            size={16}
+                          />
+
+                          <span className="font-semibold">
+                            Blockchain Anchored
+                          </span>
+                        </div>
+
+                        <div className="mt-3 space-y-2 text-[10px] font-mono text-emerald-900/70 dark:text-emerald-200/70">
+                          <div>
+                            Network:{" "}
+                            <span className="font-semibold">
+                              {baselineReport.blockchain_network ||
+                                "Sepolia"}
+                            </span>
+                          </div>
+
+                          <div className="break-all">
+                            Transaction:{" "}
+                            <span className="font-semibold">
+                              {baselineReport.blockchain_tx_hash ||
+                                "Not available"}
+                            </span>
+                          </div>
+
+                          <div className="break-all">
+                            Wallet:{" "}
+                            <span className="font-semibold">
+                              {baselineReport.anchored_by_wallet ||
+                                "Not available"}
+                            </span>
+                          </div>
+
+                          {baselineReport.anchored_at && (
+                            <div>
+                              Anchored At:{" "}
+                              <span className="font-semibold">
+                                {formatDate(
+                                  baselineReport.anchored_at
+                                )}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          disabled={
+                            actionLoading ===
+                              selectedProject.id ||
+                            !baselineReport?.id ||
+                            !baselineReport?.report_file_url
+                          }
+                          onClick={() =>
+                            handleAnchorReport(
+                              selectedProject
+                            )
+                          }
+                          className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-ocean-900 text-sand-50 dark:bg-mangrove-500 dark:text-ink text-xs font-mono font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                        >
+                          <ShieldCheckIcon />
+
+                          {actionLoading ===
+                          selectedProject.id
+                            ? "Anchoring on Sepolia..."
+                            : "Anchor on Blockchain"}
+                        </button>
+
+                        {!baselineReport?.report_file_url && (
+                          <p className="text-[10px] font-mono text-amber-700 dark:text-amber-300">
+                            Report storage URL is not available yet.
+                            The verified Excel report must be stored before
+                            blockchain anchoring.
+                          </p>
+                        )}
+                      </>
+                    )}
                   </div>
                 )}
 

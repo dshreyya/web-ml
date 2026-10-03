@@ -1,0 +1,6 @@
+{
+  "network": "sepolia",
+  "contract": "BlueCarbonRegistry",
+  "address": "0xd1CFF091a4B4627250148346Ce9131552b02497a",
+  "admin": "0xE76ed1132803629453Be89D9f3Ab60A2b3326d37"
+}
